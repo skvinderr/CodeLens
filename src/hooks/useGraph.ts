@@ -10,17 +10,27 @@ export interface UseGraphResult {
 }
 
 export function useGraph(): UseGraphResult {
-  const graph = useAppStore((state) => state.graph)
+  const mode = useAppStore((state) => state.mode)
+  const error = useAppStore((state) => state.error)
+  const visibleNodes = useAppStore((state) => state.selectVisibleNodes())
+  const visibleLinks = useAppStore((state) => state.selectVisibleLinks())
 
-  const result = useMemo<UseGraphResult>(
+  const graph = useMemo<GraphData>(
     () => ({
-      graph,
-      isLoading: false,
-      error: null,
-      refresh: () => undefined,
+      nodes: visibleNodes,
+      links: visibleLinks,
+      edges: visibleLinks,
     }),
-    [graph],
+    [visibleLinks, visibleNodes],
   )
 
-  return result
+  return useMemo(
+    () => ({
+      graph,
+      isLoading: mode === 'loading',
+      error,
+      refresh: () => undefined,
+    }),
+    [error, graph, mode],
+  )
 }

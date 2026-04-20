@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { GraphCanvas } from '@/components/graph/GraphCanvas'
 import { GraphControls } from '@/components/graph/GraphControls'
 import { MiniMap } from '@/components/graph/MiniMap'
@@ -68,16 +68,43 @@ const PLACEHOLDER_BLAST_RADIUS: BlastRadiusResult = {
 function App() {
   const [isOverlayVisible, setIsOverlayVisible] = useState(false)
 
-  const appStatus = useAppStore((state) => state.status)
-  const setSelectedNodeId = useAppStore((state) => state.setSelectedNodeId)
+  const mode = useAppStore((state) => state.mode)
+  const error = useAppStore((state) => state.error)
+  const selectNode = useAppStore((state) => state.selectNode)
+  const selectedNode = useAppStore((state) => state.selectSelectedNode())
+  const theme = useAppStore((state) => state.theme)
+  const toggleTheme = useAppStore((state) => state.toggleTheme)
 
   const { graph } = useGraph()
   const { token, setToken } = useGitHub()
   const { status: analysisStatus, findings, health } = useAnalysis()
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
+
+  const statusMessage = useMemo(() => {
+    if (error) {
+      return error
+    }
+
+    const modeLabelMap: Record<typeof mode, string> = {
+      idle: 'Idle',
+      loading: 'Loading',
+      ready: 'Ready',
+      error: 'Error',
+    }
+
+    return `Mode: ${modeLabelMap[mode]}`
+  }, [error, mode])
+
   return (
     <div className="app-shell">
-      <Navbar appName="CodeLens" sourceLabel="Browser-based code intelligence" />
+      <Navbar
+        appName="CodeLens"
+        sourceLabel="Browser-based code intelligence"
+        onToggleTheme={toggleTheme}
+      />
 
       <main className="app-main">
         <Sidebar title="Repository Input">
@@ -116,20 +143,20 @@ function App() {
             <GraphCanvas
               nodes={graph.nodes}
               edges={graph.edges}
-              onNodeSelect={setSelectedNodeId}
+              onNodeSelect={selectNode}
             />
           )}
 
           <MiniMap nodesCount={graph.nodes.length} edgesCount={graph.edges.length} />
 
           <NodeTooltip
-            node={graph.nodes[0] ?? null}
-            visible={graph.nodes.length > 0}
+            node={selectedNode ?? graph.nodes[0] ?? null}
+            visible={Boolean(selectedNode) || graph.nodes.length > 0}
           />
 
           <StatusBar
-            message={`${appStatus.message} | ${analysisStatus.message}`}
-            kind={appStatus.kind}
+            message={`${statusMessage} | ${analysisStatus.message}`}
+            kind={mode}
           />
         </section>
 

@@ -9,7 +9,7 @@ export interface UseGitHubResult {
 
 export function useGitHub(): UseGitHubResult {
   const token = useAppStore((state) => state.githubToken)
-  const setToken = useAppStore((state) => state.setGitHubToken)
+  const setToken = useAppStore((state) => state.setGithubToken)
 
   return useMemo(
     () => ({
