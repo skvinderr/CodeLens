@@ -3,6 +3,7 @@ import * as d3 from 'd3'
 import { GraphControls, type GraphViewMode } from '@/components/graph/GraphControls'
 import { MiniMap } from '@/components/graph/MiniMap'
 import { NodeTooltip } from '@/components/graph/NodeTooltip'
+import { calculateBlastRadius } from '@/lib/graph/blastRadius'
 import { useAppStore } from '@/store/useAppStore'
 import { darkenHex, languageToColor, withSaturation } from '@/utils/colorUtils'
 import type { GraphEdge, GraphNode } from '@/types'
@@ -82,6 +83,23 @@ function sourceNodeId(link: SimulationLink): string {
 
 function targetNodeId(link: SimulationLink): string {
   return typeof link.target === 'string' ? link.target : link.target.id
+}
+
+function edgeIdFromNodes(sourceId: string, targetId: string): string {
+  return `${sourceId}::${targetId}`
+}
+
+function colorForBlastDistance(distance: number): string {
+  if (distance <= 1) {
+    return '#E24B4A'
+  }
+  if (distance === 2) {
+    return '#EF9F27'
+  }
+  if (distance === 3) {
+    return '#FAC775'
+  }
+  return '#F9ECAA'
 }
 
 function nodeRadiusByMode(node: GraphNode, mode: GraphViewMode): number {
@@ -200,12 +218,136 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     return nodeMapRef.current.get(contextMenu.nodeId) ?? null
   }, [contextMenu, filteredNodes])
 
+  const blastResult = useMemo(() => {
+    if (!selectedNodeId || filteredNodes.length === 0) {
+      return null
+    }
+
+    if (!filteredNodes.some((node) => node.id === selectedNodeId)) {
+      return null
+    }
+
+    return calculateBlastRadius(
+      selectedNodeId,
+      {
+        nodes: filteredNodes,
+        links: filteredEdges,
+        edges: filteredEdges,
+      },
+      4,
+    )
+  }, [filteredEdges, filteredNodes, selectedNodeId])
+
+  const blastDistanceByNodeId = useMemo(() => {
+    const distances = new Map<string, number>()
+    if (!blastResult) {
+      return distances
+    }
+
+    distances.set(blastResult.seedNodeId, 0)
+
+    for (const affectedNode of blastResult.affected.values()) {
+      const candidateDistances = [
+        affectedNode.dependentDistance,
+        affectedNode.dependencyDistance,
+      ].filter((value): value is number => Number.isFinite(value))
+
+      if (candidateDistances.length === 0) {
+        continue
+      }
+
+      distances.set(affectedNode.nodeId, Math.min(...candidateDistances))
+    }
+
+    return distances
+  }, [blastResult])
+
+  const relevantEdgeIds = useMemo(
+    () => new Set(blastResult?.impactedEdgeIds ?? []),
+    [blastResult],
+  )
+
   const applyInteractionStyles = useCallback(() => {
     const hoveredId = hoveredNode?.id ?? null
     const searching = normalizedSearch.length > 0
+    const hasBlastSelection = Boolean(selectedNodeId && blastResult)
+
+    const baseNodeColor = (nodeDatum: SimulationNode): string =>
+      nodeColorByMode(nodeDatum, viewMode)
+
+    const baseNodeRadius = (nodeDatum: SimulationNode): number =>
+      nodeRadiusByMode(nodeDatum, viewMode)
+
+    const baseLinkColor = (linkDatum: SimulationLink): string => {
+      const source =
+        typeof linkDatum.source === 'string'
+          ? nodeMapRef.current.get(linkDatum.source)
+          : linkDatum.source
+      const sourceColor = source ? baseNodeColor(source) : '#7c8e9f'
+      return withSaturation(sourceColor, 0.6)
+    }
 
     nodeSelectionRef.current
-      ?.attr('opacity', (nodeDatum) => {
+      ?.attr('r', (nodeDatum) => {
+        const baseRadius = baseNodeRadius(nodeDatum)
+        if (hasBlastSelection && nodeDatum.id === selectedNodeId) {
+          return baseRadius * 1.3
+        }
+        return baseRadius
+      })
+      .attr('fill', (nodeDatum) => {
+        if (hasBlastSelection) {
+          if (nodeDatum.id === selectedNodeId) {
+            return '#ffffff'
+          }
+
+          const impactDistance = blastDistanceByNodeId.get(nodeDatum.id)
+          if (typeof impactDistance === 'number' && impactDistance > 0) {
+            return colorForBlastDistance(impactDistance)
+          }
+        }
+
+        return baseNodeColor(nodeDatum)
+      })
+      .attr('stroke', (nodeDatum) => {
+        if (hasBlastSelection) {
+          if (nodeDatum.id === selectedNodeId) {
+            return '#8FF7FF'
+          }
+
+          const impactDistance = blastDistanceByNodeId.get(nodeDatum.id)
+          if (typeof impactDistance === 'number' && impactDistance > 0) {
+            return darkenHex(colorForBlastDistance(impactDistance), 0.22)
+          }
+        }
+
+        return darkenHex(baseNodeColor(nodeDatum), 0.24)
+      })
+      .attr('stroke-width', (nodeDatum) => {
+        if (hasBlastSelection && nodeDatum.id === selectedNodeId) {
+          return 4.2
+        }
+
+        if (nodeDatum.id === hoveredId) {
+          return 3
+        }
+
+        return 2
+      })
+      .attr('opacity', (nodeDatum) => {
+        if (hasBlastSelection) {
+          if (nodeDatum.id === selectedNodeId) {
+            return 1
+          }
+
+          const impactDistance = blastDistanceByNodeId.get(nodeDatum.id)
+          if (typeof impactDistance === 'number' && impactDistance > 0) {
+            return 1
+          }
+
+          return 0.08
+        }
+
         if (!searching) {
           return 1
         }
@@ -213,6 +355,15 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
         return matchingNodeIds.has(nodeDatum.id) ? 1 : 0.16
       })
       .attr('stroke-opacity', (nodeDatum) => {
+        if (hasBlastSelection) {
+          if (nodeDatum.id === selectedNodeId) {
+            return 1
+          }
+
+          const impactDistance = blastDistanceByNodeId.get(nodeDatum.id)
+          return typeof impactDistance === 'number' && impactDistance > 0 ? 0.95 : 0.1
+        }
+
         if (nodeDatum.id === selectedNodeId || nodeDatum.id === hoveredId) {
           return 1
         }
@@ -224,35 +375,129 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
         return 0
       })
 
-    linkSelectionRef.current?.attr('stroke-opacity', (linkDatum) => {
-      let opacity = 0.25
+    linkSelectionRef.current
+      ?.classed('is-affected-link', (linkDatum) => {
+        if (!hasBlastSelection) {
+          return false
+        }
 
-      if (selectedNodeId) {
         const source = sourceNodeId(linkDatum)
         const target = targetNodeId(linkDatum)
-        opacity = source === selectedNodeId || target === selectedNodeId ? 0.85 : 0.25
-      }
+        return relevantEdgeIds.has(edgeIdFromNodes(source, target))
+      })
+      .attr('display', (linkDatum) => {
+        if (!hasBlastSelection) {
+          return null
+        }
 
-      if (searching) {
         const source = sourceNodeId(linkDatum)
         const target = targetNodeId(linkDatum)
-        const touchesSearch =
-          matchingNodeIds.has(source) || matchingNodeIds.has(target)
+        const relevant = relevantEdgeIds.has(edgeIdFromNodes(source, target))
+        return relevant ? null : 'none'
+      })
+      .attr('stroke-dasharray', (linkDatum) => {
+        if (!hasBlastSelection) {
+          return null
+        }
 
-        opacity = touchesSearch ? Math.max(opacity, 0.55) : opacity * 0.2
-      }
+        const source = sourceNodeId(linkDatum)
+        const target = targetNodeId(linkDatum)
+        const relevant = relevantEdgeIds.has(edgeIdFromNodes(source, target))
+        return relevant ? '7 4' : null
+      })
+      .attr('stroke-opacity', (linkDatum) => {
+        if (hasBlastSelection) {
+          const source = sourceNodeId(linkDatum)
+          const target = targetNodeId(linkDatum)
+          const relevant = relevantEdgeIds.has(edgeIdFromNodes(source, target))
+          return relevant ? 0.95 : 0
+        }
 
-      return opacity
-    })
+        let opacity = 0.25
+
+        if (selectedNodeId) {
+          const source = sourceNodeId(linkDatum)
+          const target = targetNodeId(linkDatum)
+          opacity = source === selectedNodeId || target === selectedNodeId ? 0.85 : 0.25
+        }
+
+        if (searching) {
+          const source = sourceNodeId(linkDatum)
+          const target = targetNodeId(linkDatum)
+          const touchesSearch =
+            matchingNodeIds.has(source) || matchingNodeIds.has(target)
+
+          opacity = touchesSearch ? Math.max(opacity, 0.55) : opacity * 0.2
+        }
+
+        return opacity
+      })
+      .attr('stroke-width', (linkDatum) => {
+        if (!hasBlastSelection) {
+          return clamp(linkDatum.weight ?? 1, 1, 4)
+        }
+
+        const source = sourceNodeId(linkDatum)
+        const target = targetNodeId(linkDatum)
+        const relevant = relevantEdgeIds.has(edgeIdFromNodes(source, target))
+        return relevant ? clamp((linkDatum.weight ?? 1) + 1, 1.5, 5) : 0
+      })
+      .attr('stroke', (linkDatum) => {
+        if (!hasBlastSelection) {
+          return baseLinkColor(linkDatum)
+        }
+
+        const source = sourceNodeId(linkDatum)
+        const target = targetNodeId(linkDatum)
+        const relevant = relevantEdgeIds.has(edgeIdFromNodes(source, target))
+
+        if (!relevant) {
+          return baseLinkColor(linkDatum)
+        }
+
+        if (source === selectedNodeId || target === selectedNodeId) {
+          return '#FFFFFF'
+        }
+
+        const sourceDistance = blastDistanceByNodeId.get(source)
+        const targetDistance = blastDistanceByNodeId.get(target)
+        const candidateDistances = [sourceDistance, targetDistance].filter(
+          (value): value is number => typeof value === 'number' && value > 0,
+        )
+
+        if (candidateDistances.length > 0) {
+          return colorForBlastDistance(Math.min(...candidateDistances))
+        }
+
+        return baseLinkColor(linkDatum)
+      })
 
     labelSelectionRef.current?.attr('opacity', (nodeDatum) => {
+      if (hasBlastSelection) {
+        if (nodeDatum.id === selectedNodeId) {
+          return 1
+        }
+
+        const impactDistance = blastDistanceByNodeId.get(nodeDatum.id)
+        return typeof impactDistance === 'number' && impactDistance > 0 ? 1 : 0.08
+      }
+
       if (!searching) {
         return 1
       }
 
       return matchingNodeIds.has(nodeDatum.id) ? 1 : 0.2
     })
-  }, [hoveredNode?.id, matchingNodeIds, normalizedSearch, selectedNodeId])
+  }, [
+    blastDistanceByNodeId,
+    blastResult,
+    hoveredNode?.id,
+    matchingNodeIds,
+    normalizedSearch,
+    relevantEdgeIds,
+    selectedNodeId,
+    viewMode,
+  ])
 
   const applyZoomTransform = useCallback(
     (transform: d3.ZoomTransform, duration = 220) => {

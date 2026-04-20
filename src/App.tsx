@@ -15,8 +15,9 @@ import { TokenInput } from '@/components/ui/TokenInput'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useGitHub } from '@/hooks/useGitHub'
 import { useGraph } from '@/hooks/useGraph'
+import { calculateBlastRadius } from '@/lib/graph/blastRadius'
 import { useAppStore } from '@/store/useAppStore'
-import type { BlastRadiusResult, CodeLensFileNode, Contributor } from '@/types'
+import type { CodeLensFileNode, Contributor } from '@/types'
 
 const PLACEHOLDER_FILES: CodeLensFileNode[] = [
   {
@@ -55,25 +56,30 @@ const PLACEHOLDER_CONTRIBUTORS: Contributor[] = [
   },
 ]
 
-const PLACEHOLDER_BLAST_RADIUS: BlastRadiusResult = {
-  seedNodeId: 'node-1',
-  impactedNodeIds: [],
-  impactedEdgeIds: [],
-  score: 0,
-}
-
 function App() {
   const [isOverlayVisible, setIsOverlayVisible] = useState(false)
 
   const mode = useAppStore((state) => state.mode)
   const error = useAppStore((state) => state.error)
   const selectNode = useAppStore((state) => state.selectNode)
+  const selectedNodeId = useAppStore((state) => state.selectedNodeId)
+  const analysisResult = useAppStore((state) => state.analysisResult)
   const theme = useAppStore((state) => state.theme)
   const toggleTheme = useAppStore((state) => state.toggleTheme)
 
   const { graph } = useGraph()
   const { token, setToken } = useGitHub()
   const { status: analysisStatus, findings, health } = useAnalysis()
+
+  const graphForBlast = analysisResult?.graph ?? graph
+
+  const blastRadiusResult = useMemo(() => {
+    if (!selectedNodeId || graphForBlast.nodes.length === 0) {
+      return null
+    }
+
+    return calculateBlastRadius(selectedNodeId, graphForBlast, 4)
+  }, [graphForBlast, selectedNodeId])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
@@ -129,11 +135,7 @@ function App() {
               description="Connect a repository to render dependencies and impact paths."
             />
           ) : (
-            <GraphCanvas
-              nodes={graph.nodes}
-              edges={graph.edges}
-              onNodeSelect={selectNode}
-            />
+            <GraphCanvas nodes={graph.nodes} edges={graph.edges} />
           )}
 
           <StatusBar
@@ -146,7 +148,11 @@ function App() {
           <ContributorsPanel contributors={PLACEHOLDER_CONTRIBUTORS} />
           <HealthPanel score={health} />
           <SecurityPanel findings={findings} />
-          <BlastRadiusPanel result={PLACEHOLDER_BLAST_RADIUS} />
+          <BlastRadiusPanel
+            result={blastRadiusResult}
+            nodes={graphForBlast.nodes}
+            onSelectNode={selectNode}
+          />
         </Sidebar>
       </main>
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
+import { calculateBlastRadius } from '@/lib/graph/blastRadius'
 import type { AnalysisResult, AnalysisStage, AppMode, GraphLink, GraphNode } from '@/types'
 
 type SidebarPanel = 'tree' | 'contributors' | 'health' | 'security' | 'blast'
@@ -64,9 +65,6 @@ const getLinksFromResult = (result: AnalysisResult | null): GraphLink[] => {
 
   return result.graph.links.length > 0 ? result.graph.links : result.graph.edges
 }
-
-const linkKey = (link: GraphLink): string =>
-  `${link.source}::${link.target}::${link.type}`
 
 const normalizeAnalysisResult = (result: AnalysisResult): AnalysisResult => {
   const links = getLinksFromResult(result)
@@ -172,17 +170,9 @@ export const useAppStore = create<AppStore>()(
             return
           }
 
-          const links = getLinksFromResult(state.analysisResult)
-          const blastRadius = new Set<string>([id])
-          const highlighted = new Set<string>()
-
-          for (const link of links) {
-            if (link.source === id || link.target === id) {
-              blastRadius.add(link.source)
-              blastRadius.add(link.target)
-              highlighted.add(linkKey(link))
-            }
-          }
+          const blastResult = calculateBlastRadius(id, state.analysisResult.graph)
+          const blastRadius = new Set<string>(blastResult.impactedNodeIds)
+          const highlighted = new Set<string>(blastResult.impactedEdgeIds)
 
           state.blastRadiusIds = blastRadius
           state.highlightedLinks = highlighted

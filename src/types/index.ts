@@ -168,11 +168,27 @@ export type SecurityFinding = SecurityAlert & {
   message?: string
 }
 
+export interface BlastAffectedNode {
+  nodeId: string
+  dependentDistance?: number
+  dependencyDistance?: number
+}
+
+export interface BlastPathEntry {
+  nodeId: string
+  distance: number
+  via: string | null
+}
+
 export interface BlastRadiusResult {
   seedNodeId: string
+  affected: Map<string, BlastAffectedNode>
+  dependents: BlastPathEntry[]
+  dependencies: BlastPathEntry[]
   impactedNodeIds: string[]
   impactedEdgeIds: string[]
   score: number
+  maxDepth: number
 }
 
 export interface RateLimitState {
