@@ -32,6 +32,7 @@ export interface GraphNode extends FileNode {
   blastScore: number
   isCircularDep: boolean
   degree: number
+  isOrphan?: boolean
 
   // Compatibility fields for current scaffold placeholders.
   label?: string
