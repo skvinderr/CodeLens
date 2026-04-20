@@ -17,7 +17,7 @@ interface AppStore {
 export const useAppStore = create<AppStore>((set) => ({
   source: 'github',
   githubToken: '',
-  graph: { nodes: [], edges: [] },
+  graph: { nodes: [], links: [], edges: [] },
   status: { message: 'Waiting for repository input', kind: 'idle' },
   selectedNodeId: null,
   setSource: (source) => set({ source }),

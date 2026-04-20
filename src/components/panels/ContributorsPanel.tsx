@@ -11,8 +11,8 @@ export function ContributorsPanel({ contributors }: ContributorsPanelProps) {
       <h2 className="panel-title">Contributors</h2>
       <ul className="list-reset panel-body">
         {contributors.map((contributor) => (
-          <li key={contributor.id}>
-            {contributor.name} <Badge label={`${contributor.commits} commits`} />
+          <li key={contributor.login}>
+            @{contributor.login} <Badge label={`${contributor.commits} commits`} />
           </li>
         ))}
       </ul>

@@ -10,9 +10,15 @@ export interface HealthInput {
 export function calculateHealthScore(input: HealthInput): HealthScore {
   void input
   return {
-    maintainability: 0,
-    testCoverage: 0,
-    dependencyFreshness: 0,
     overall: 0,
+    categories: {
+      dependencies: 0,
+      security: 0,
+      complexity: 0,
+      documentation: 0,
+      testCoverage: 0,
+      codeSmells: 0,
+    },
+    breakdown: [],
   }
 }

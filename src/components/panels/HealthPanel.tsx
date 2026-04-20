@@ -11,9 +11,12 @@ export function HealthPanel({ score }: HealthPanelProps) {
       <h2 className="panel-title">Health</h2>
       {score ? (
         <ul className="list-reset panel-body">
-          <li>Maintainability: {score.maintainability}</li>
-          <li>Test Coverage: {score.testCoverage}</li>
-          <li>Dependency Freshness: {score.dependencyFreshness}</li>
+          <li>Dependencies: {score.categories.dependencies}</li>
+          <li>Security: {score.categories.security}</li>
+          <li>Complexity: {score.categories.complexity}</li>
+          <li>Documentation: {score.categories.documentation}</li>
+          <li>Test Coverage: {score.categories.testCoverage}</li>
+          <li>Code Smells: {score.categories.codeSmells}</li>
           <li>
             Overall: <Badge label={String(score.overall)} tone="success" />
           </li>

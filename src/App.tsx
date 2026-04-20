@@ -40,8 +40,22 @@ const PLACEHOLDER_FILES: CodeLensFileNode[] = [
 ]
 
 const PLACEHOLDER_CONTRIBUTORS: Contributor[] = [
-  { id: 'u-1', name: 'Alex Rivera', commits: 24 },
-  { id: 'u-2', name: 'Jordan Lee', commits: 17 },
+  {
+    login: 'alexrivera',
+    avatarUrl: 'https://avatars.githubusercontent.com/u/1?v=4',
+    commits: 24,
+    additions: 510,
+    deletions: 180,
+    lastCommit: new Date(),
+  },
+  {
+    login: 'jordanlee',
+    avatarUrl: 'https://avatars.githubusercontent.com/u/2?v=4',
+    commits: 17,
+    additions: 332,
+    deletions: 141,
+    lastCommit: new Date(),
+  },
 ]
 
 const PLACEHOLDER_BLAST_RADIUS: BlastRadiusResult = {

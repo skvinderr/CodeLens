@@ -10,5 +10,5 @@ export function buildGraphFromFiles(
 ): GraphData {
   void files
   void options
-  return { nodes: [], edges: [] }
+  return { nodes: [], links: [], edges: [] }
 }
