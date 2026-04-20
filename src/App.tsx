@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GraphCanvas } from '@/components/graph/GraphCanvas'
-import { GraphControls } from '@/components/graph/GraphControls'
-import { MiniMap } from '@/components/graph/MiniMap'
-import { NodeTooltip } from '@/components/graph/NodeTooltip'
 import { Navbar } from '@/components/layout/Navbar'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { StatusBar } from '@/components/layout/StatusBar'
@@ -71,7 +68,6 @@ function App() {
   const mode = useAppStore((state) => state.mode)
   const error = useAppStore((state) => state.error)
   const selectNode = useAppStore((state) => state.selectNode)
-  const selectedNode = useAppStore((state) => state.selectSelectedNode())
   const theme = useAppStore((state) => state.theme)
   const toggleTheme = useAppStore((state) => state.toggleTheme)
 
@@ -127,13 +123,6 @@ function App() {
         </Sidebar>
 
         <section className="workspace-column">
-          <GraphControls
-            onZoomIn={() => undefined}
-            onZoomOut={() => undefined}
-            onReset={() => undefined}
-            onFit={() => undefined}
-          />
-
           {graph.nodes.length === 0 ? (
             <EmptyState
               title="No Graph Yet"
@@ -146,13 +135,6 @@ function App() {
               onNodeSelect={selectNode}
             />
           )}
-
-          <MiniMap nodesCount={graph.nodes.length} edgesCount={graph.edges.length} />
-
-          <NodeTooltip
-            node={selectedNode ?? graph.nodes[0] ?? null}
-            visible={Boolean(selectedNode) || graph.nodes.length > 0}
-          />
 
           <StatusBar
             message={`${statusMessage} | ${analysisStatus.message}`}

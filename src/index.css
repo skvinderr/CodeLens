@@ -109,7 +109,6 @@ body {
 }
 
 .graph-canvas,
-.graph-controls,
 .mini-map,
 .node-tooltip,
 .status-bar,
@@ -122,13 +121,213 @@ body {
 }
 
 .graph-canvas {
-  min-height: 260px;
+  min-height: min(72vh, calc(100vh - 240px));
+  padding: 0;
+  overflow: hidden;
+  position: relative;
 }
 
-.graph-controls {
+.graph-canvas-viewport {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  position: relative;
+}
+
+.graph-canvas-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  background: transparent;
+}
+
+.graph-canvas-hud {
+  position: absolute;
+  top: 0.65rem;
+  left: 0.65rem;
+  z-index: 2;
   display: flex;
   gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(8, 22, 36, 0.72);
+  color: #e8f7ff;
+  font: 500 0.7rem/1 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.graph-node-label {
+  user-select: none;
+}
+
+.graph-tooltip-anchor {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  width: min(280px, 45vw);
+}
+
+.graph-tooltip-anchor .node-tooltip {
+  margin: 0;
+  box-shadow: 0 14px 26px rgba(2, 10, 18, 0.24);
+  backdrop-filter: blur(6px);
+}
+
+.graph-context-menu {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 170px;
+  border: 1px solid var(--cl-border);
+  border-radius: 12px;
+  padding: 0.4rem;
+  background: rgba(10, 18, 30, 0.96);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+.graph-context-menu button {
+  border: 0;
+  background: transparent;
+  color: #dbeeff;
+  text-align: left;
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  font: 500 0.78rem/1.1 'IBM Plex Mono', ui-monospace, monospace;
+  cursor: pointer;
+}
+
+.graph-context-menu button:hover {
+  background: rgba(29, 194, 221, 0.18);
+}
+
+.graph-controls-floating {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 8;
+  width: min(350px, 88vw);
+  border: 1px solid rgba(130, 156, 184, 0.42);
+  border-radius: 14px;
+  background: rgba(8, 18, 29, 0.82);
+  color: #e7f3ff;
+  backdrop-filter: blur(8px);
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.graph-controls-toolbar {
+  display: flex;
+  gap: 0.35rem;
   flex-wrap: wrap;
+}
+
+.graph-controls-toolbar button,
+.graph-controls-modes button,
+.graph-controls-language-chips button,
+.graph-controls-filter-row button {
+  border: 1px solid rgba(133, 166, 197, 0.4);
+  border-radius: 9px;
+  background: rgba(22, 37, 53, 0.8);
+  color: #dff2ff;
+  font: 500 0.72rem/1.1 'IBM Plex Mono', ui-monospace, monospace;
+  padding: 0.38rem 0.52rem;
+  cursor: pointer;
+}
+
+.graph-controls-toolbar button:hover,
+.graph-controls-modes button:hover,
+.graph-controls-language-chips button:hover,
+.graph-controls-filter-row button:hover {
+  background: rgba(29, 194, 221, 0.22);
+}
+
+.graph-controls-meta {
+  margin: 0;
+  color: #9fc3df;
+  font: 500 0.7rem/1 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.graph-controls-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.graph-controls-modes button.is-active,
+.graph-controls-language-chips button.is-active {
+  border-color: rgba(41, 224, 255, 0.8);
+  background: rgba(16, 90, 108, 0.68);
+}
+
+.graph-controls-language-chips button.is-dimmed {
+  opacity: 0.4;
+}
+
+.graph-controls-filter-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.graph-controls-language-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.graph-controls-search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font: 500 0.68rem/1 'IBM Plex Mono', ui-monospace, monospace;
+  color: #b8d4e8;
+}
+
+.graph-controls-search input {
+  border: 1px solid rgba(133, 166, 197, 0.45);
+  border-radius: 9px;
+  background: rgba(3, 10, 19, 0.72);
+  color: #ecf8ff;
+  font: 500 0.76rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+  padding: 0.42rem 0.5rem;
+}
+
+.graph-controls-search input::placeholder {
+  color: rgba(184, 212, 232, 0.65);
+}
+
+.graph-controls-pin-row {
+  justify-content: space-between;
+}
+
+.mini-map-floating {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 7;
+  width: 140px;
+  height: 100px;
+  border-radius: 12px;
+  border: 1px solid rgba(151, 177, 204, 0.45);
+  background: rgba(6, 14, 24, 0.52);
+  backdrop-filter: blur(5px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.mini-map-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.mini-map-viewport-rect {
+  fill: rgba(62, 194, 228, 0.22);
+  stroke: rgba(120, 227, 255, 0.85);
+  stroke-width: 1.1;
 }
 
 .status-bar {
