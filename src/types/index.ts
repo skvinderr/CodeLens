@@ -96,6 +96,9 @@ export interface BusFactorAnalysis {
 }
 
 export type AlertType =
+  | 'aws-access-key'
+  | 'google-api-key'
+  | 'github-token'
   | 'api-key'
   | 'private-key'
   | 'password'
@@ -104,11 +107,18 @@ export type AlertType =
   | 'connection-string'
   | 'hardcoded-ip'
   | 'todo-security'
+  | 'eval-usage'
+  | 'innerhtml-assignment'
+  | 'dangerous-html'
+  | 'console-log'
+  | 'debugger'
+  | 'insecure-http'
 
 export interface SecurityAlert {
   id: string
   filePath: string
   line: number
+  column: number
   type: AlertType
   severity: 'critical' | 'high' | 'medium' | 'low'
   description: string
