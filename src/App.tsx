@@ -16,6 +16,7 @@ import { useAnalysis } from '@/hooks/useAnalysis'
 import { useGitHub } from '@/hooks/useGitHub'
 import { useGraph } from '@/hooks/useGraph'
 import { analyzeBusFactor } from '@/lib/analysis/busFactor'
+import { computeHealthScore } from '@/lib/analysis/healthScorer'
 import { calculateBlastRadius } from '@/lib/graph/blastRadius'
 import { useAppStore } from '@/store/useAppStore'
 import type {
@@ -75,7 +76,7 @@ function App() {
 
   const { graph } = useGraph()
   const { token, setToken } = useGitHub()
-  const { status: analysisStatus, findings, health } = useAnalysis()
+  const { status: analysisStatus, findings, health, runAnalysis } = useAnalysis()
 
   const graphForBlast = analysisResult?.graph ?? graph
 
@@ -126,7 +127,15 @@ function App() {
     return analyzeBusFactor(analysisResult.graph.nodes, analysisResult.contributors)
   }, [analysisResult])
 
-  const resolvedHealth = health ?? analysisResult?.health ?? null
+  const computedHealth = useMemo(() => {
+    if (!analysisResult) {
+      return null
+    }
+
+    return computeHealthScore(analysisResult)
+  }, [analysisResult])
+
+  const resolvedHealth = health ?? computedHealth ?? analysisResult?.health ?? null
 
   const blastRadiusResult = useMemo(() => {
     if (!selectedNodeId || graphForBlast.nodes.length === 0) {
@@ -205,7 +214,14 @@ function App() {
             contributorsByFile={contributorsByFile}
             fallbackContributors={PLACEHOLDER_CONTRIBUTORS}
           />
-          <HealthPanel score={resolvedHealth} busFactor={busFactor} />
+          <HealthPanel
+            score={resolvedHealth}
+            busFactor={busFactor}
+            techStack={analysisResult?.techStack ?? null}
+            analyzedAt={analysisResult?.analyzedAt ?? null}
+            onReanalyze={runAnalysis}
+            isReanalyzing={mode === 'loading'}
+          />
           <SecurityPanel findings={resolvedSecurityFindings} />
           <BlastRadiusPanel
             result={blastRadiusResult}

@@ -416,6 +416,261 @@ body {
   font-size: 0.9rem;
 }
 
+.health-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.62rem;
+}
+
+.health-gauge-wrap {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  margin: 0 auto;
+}
+
+.health-gauge {
+  width: 160px;
+  height: 160px;
+  display: block;
+}
+
+.health-gauge-track {
+  stroke: rgba(123, 147, 170, 0.25);
+}
+
+.health-gauge-value {
+  transition: stroke-dashoffset 80ms linear;
+}
+
+.health-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.health-grade {
+  margin: 0;
+  font: 700 2rem/1 'Space Grotesk', system-ui, sans-serif;
+  color: var(--cl-text);
+}
+
+.health-score-label {
+  margin: 0.1rem 0 0;
+  color: var(--cl-muted);
+  font: 600 0.75rem/1 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.health-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 0.34rem;
+}
+
+.health-category-row-wrap {
+  border: 1px solid var(--cl-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.dark .health-category-row-wrap {
+  background: rgba(16, 27, 39, 0.75);
+}
+
+.health-category-row {
+  border: 0;
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.42rem 0.45rem;
+  cursor: pointer;
+}
+
+.health-category-name {
+  text-align: left;
+  font: 600 0.68rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+  color: var(--cl-text);
+}
+
+.health-category-bar {
+  height: 9px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(129, 156, 182, 0.26);
+}
+
+.health-category-fill {
+  height: 100%;
+  display: block;
+}
+
+.health-category-value {
+  text-align: right;
+  color: var(--cl-muted);
+  font: 700 0.7rem/1 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.health-category-findings {
+  border-top: 1px dashed var(--cl-border);
+  padding: 0.36rem 0.45rem 0.45rem;
+  gap: 0.24rem;
+}
+
+.health-category-findings li {
+  display: flex;
+  gap: 0.3rem;
+  align-items: flex-start;
+  color: var(--cl-muted);
+  font: 500 0.68rem/1.25 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+.health-points-chip {
+  border-radius: 999px;
+  padding: 0.14rem 0.35rem;
+  font: 700 0.6rem/1 'IBM Plex Mono', ui-monospace, monospace;
+  flex: 0 0 auto;
+}
+
+.health-points-chip.is-positive {
+  background: rgba(29, 158, 117, 0.2);
+  color: #157c5d;
+}
+
+.health-points-chip.is-negative {
+  background: rgba(226, 75, 74, 0.18);
+  color: #9b2525;
+}
+
+.health-improvements {
+  border: 1px solid var(--cl-border);
+  border-radius: 12px;
+  padding: 0.55rem;
+}
+
+.health-improvement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.health-improvement-list li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+.health-improvement-index {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(15, 152, 179, 0.18);
+  color: var(--cl-accent-strong);
+  font: 700 0.72rem/24px 'IBM Plex Mono', ui-monospace, monospace;
+  text-align: center;
+}
+
+.health-improvement-card {
+  border: 1px solid var(--cl-border);
+  border-radius: 10px;
+  padding: 0.44rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.dark .health-improvement-card {
+  background: rgba(16, 27, 39, 0.82);
+}
+
+.health-improvement-category {
+  width: fit-content;
+  border-radius: 999px;
+  background: rgba(15, 152, 179, 0.18);
+  color: var(--cl-accent-strong);
+  font: 700 0.58rem/1 'IBM Plex Mono', ui-monospace, monospace;
+  padding: 0.16rem 0.34rem;
+  text-transform: uppercase;
+}
+
+.health-improvement-card p {
+  margin: 0;
+  color: var(--cl-text);
+  font: 500 0.73rem/1.3 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+.health-improvement-card strong {
+  color: var(--cl-success);
+  font: 700 0.67rem/1.1 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.health-tech-stack {
+  border: 1px solid var(--cl-border);
+  border-radius: 12px;
+  padding: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.34rem;
+}
+
+.health-tech-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.health-tech-pill,
+.health-framework-badge {
+  border-radius: 999px;
+  border: 1px solid var(--cl-border);
+  font: 600 0.62rem/1.1 'IBM Plex Mono', ui-monospace, monospace;
+  padding: 0.2rem 0.42rem;
+}
+
+.health-tech-pill {
+  color: var(--cl-text);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.dark .health-tech-pill {
+  background: rgba(18, 29, 42, 0.85);
+}
+
+.health-framework-badge {
+  color: var(--cl-accent-strong);
+  background: rgba(15, 152, 179, 0.12);
+}
+
+.health-tech-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  color: var(--cl-muted);
+  font: 600 0.66rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.health-footer {
+  border-top: 1px dashed var(--cl-border);
+  padding-top: 0.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.health-last-analyzed {
+  color: var(--cl-muted);
+  font: 500 0.68rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+}
+
 .contributors-selected-header {
   margin-bottom: 0.45rem;
 }

@@ -135,20 +135,28 @@ export interface HealthCategories {
   codeSmells: number
 }
 
-export type NegativeNumber = number
+export type HealthGrade = 'A' | 'B' | 'C' | 'D' | 'F'
 
 export interface HealthFinding {
   category: keyof HealthCategories | string
   message: string
-  severity: 'critical' | 'high' | 'medium' | 'low'
+  points: number
   affectedFiles: string[]
-  score: NegativeNumber
+}
+
+export interface HealthImprovement {
+  category: keyof HealthCategories | string
+  message: string
+  estimatedGain: number
 }
 
 export interface HealthScore {
   overall: number
+  grade: HealthGrade
   categories: HealthCategories
   breakdown: HealthFinding[]
+  topIssues: HealthFinding[]
+  improvements: HealthImprovement[]
   busFactor?: BusFactorAnalysis
 
   // Compatibility fields for initial scaffold components.
