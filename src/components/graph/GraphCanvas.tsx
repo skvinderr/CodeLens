@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
-import { GraphControls, type GraphViewMode } from '@/components/graph/GraphControls'
+import {
+  GraphControls,
+  type GraphViewMode,
+  type OwnershipLegendItem,
+} from '@/components/graph/GraphControls'
 import { MiniMap } from '@/components/graph/MiniMap'
 import { NodeTooltip } from '@/components/graph/NodeTooltip'
 import { calculateBlastRadius } from '@/lib/graph/blastRadius'
 import { useAppStore } from '@/store/useAppStore'
+import { contributorColorFromLogin, normalizePathKey } from '@/utils/ownershipUtils'
 import { darkenHex, languageToColor, withSaturation } from '@/utils/colorUtils'
-import type { GraphEdge, GraphNode } from '@/types'
+import type { FileContributors, GraphEdge, GraphNode } from '@/types'
 
 export interface GraphCanvasProps {
   nodes: GraphNode[]
@@ -53,6 +58,22 @@ function truncateLabel(value: string, maxLength = 18): string {
 
 function getNodeLanguageKey(node: GraphNode): string {
   return (node.language || node.extension || 'other').toLowerCase()
+}
+
+function getTopContributorLogin(entry: FileContributors | undefined): string | null {
+  if (!entry || entry.contributors.length === 0) {
+    return null
+  }
+
+  const [top] = [...entry.contributors].sort((left, right) => {
+    if (right.commits !== left.commits) {
+      return right.commits - left.commits
+    }
+
+    return left.login.localeCompare(right.login)
+  })
+
+  return top?.login ?? null
 }
 
 function defaultNodeRadius(node: GraphNode): number {
@@ -118,6 +139,9 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
   const selectNode = useAppStore((state) => state.selectNode)
   const selectedNodeId = useAppStore((state) => state.selectedNodeId)
   const repo = useAppStore((state) => state.analysisResult?.repo ?? null)
+  const contributorsByFile = useAppStore(
+    (state) => state.analysisResult?.contributors ?? null,
+  )
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -192,6 +216,70 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       ),
     [edges, filteredNodeIds],
   )
+
+  const contributorsByPath = useMemo(() => {
+    if (!contributorsByFile || contributorsByFile.size === 0) {
+      return null
+    }
+
+    const map = new Map<string, FileContributors>()
+    for (const [key, value] of contributorsByFile.entries()) {
+      map.set(normalizePathKey(key), value)
+      map.set(normalizePathKey(value.filePath), value)
+    }
+
+    return map
+  }, [contributorsByFile])
+
+  const topContributorByNodeId = useMemo(() => {
+    const map = new Map<string, string>()
+    if (!contributorsByPath) {
+      return map
+    }
+
+    for (const node of filteredNodes) {
+      const normalizedPath = normalizePathKey(getNodePath(node))
+      const entry =
+        contributorsByPath.get(normalizedPath) ??
+        contributorsByPath.get(normalizePathKey(node.id))
+
+      const topContributor = getTopContributorLogin(entry)
+      if (topContributor) {
+        map.set(node.id, topContributor)
+      }
+    }
+
+    return map
+  }, [contributorsByPath, filteredNodes])
+
+  const ownershipColorByContributor = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const login of new Set(topContributorByNodeId.values())) {
+      map.set(login, contributorColorFromLogin(login))
+    }
+    return map
+  }, [topContributorByNodeId])
+
+  const ownershipLegend = useMemo<OwnershipLegendItem[]>(() => {
+    const countsByLogin = new Map<string, number>()
+
+    for (const login of topContributorByNodeId.values()) {
+      countsByLogin.set(login, (countsByLogin.get(login) ?? 0) + 1)
+    }
+
+    return [...countsByLogin.entries()]
+      .sort((left, right) => {
+        if (right[1] !== left[1]) {
+          return right[1] - left[1]
+        }
+        return left[0].localeCompare(right[0])
+      })
+      .map(([login, files]) => ({
+        login,
+        files,
+        color: ownershipColorByContributor.get(login) ?? contributorColorFromLogin(login),
+      }))
+  }, [ownershipColorByContributor, topContributorByNodeId])
 
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const matchingNodeIds = useMemo(() => {
@@ -272,8 +360,20 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     const searching = normalizedSearch.length > 0
     const hasBlastSelection = Boolean(selectedNodeId && blastResult)
 
-    const baseNodeColor = (nodeDatum: SimulationNode): string =>
-      nodeColorByMode(nodeDatum, viewMode)
+    const baseNodeColor = (nodeDatum: SimulationNode): string => {
+      if (viewMode === 'ownership') {
+        const owner = topContributorByNodeId.get(nodeDatum.id)
+        if (!owner) {
+          return '#90a3b8'
+        }
+
+        return (
+          ownershipColorByContributor.get(owner) ?? contributorColorFromLogin(owner)
+        )
+      }
+
+      return nodeColorByMode(nodeDatum, viewMode)
+    }
 
     const baseNodeRadius = (nodeDatum: SimulationNode): number =>
       nodeRadiusByMode(nodeDatum, viewMode)
@@ -494,8 +594,10 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     hoveredNode?.id,
     matchingNodeIds,
     normalizedSearch,
+    ownershipColorByContributor,
     relevantEdgeIds,
     selectedNodeId,
+    topContributorByNodeId,
     viewMode,
   ])
 
@@ -793,8 +895,20 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     linkSelectionRef.current = linkSelection
     labelSelectionRef.current = labelSelection
 
-    const colorForNode = (nodeDatum: SimulationNode): string =>
-      nodeColorByMode(nodeDatum, viewMode)
+    const colorForNode = (nodeDatum: SimulationNode): string => {
+      if (viewMode === 'ownership') {
+        const owner = topContributorByNodeId.get(nodeDatum.id)
+        if (!owner) {
+          return '#90a3b8'
+        }
+
+        return (
+          ownershipColorByContributor.get(owner) ?? contributorColorFromLogin(owner)
+        )
+      }
+
+      return nodeColorByMode(nodeDatum, viewMode)
+    }
 
     const radiusForNode = (nodeDatum: SimulationNode): number =>
       nodeRadiusByMode(nodeDatum, viewMode)
@@ -1033,7 +1147,9 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     filteredEdges,
     filteredNodes,
     onNodeSelect,
+    ownershipColorByContributor,
     selectNode,
+    topContributorByNodeId,
     viewMode,
     viewport.height,
     viewport.width,
@@ -1138,6 +1254,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
           detectedLanguages={detectedLanguages}
           hiddenLanguages={hiddenLanguages}
           searchQuery={searchQuery}
+          ownershipLegend={ownershipLegend}
           onZoomIn={() => handleZoomDelta(1.2)}
           onZoomOut={() => handleZoomDelta(1 / 1.2)}
           onFitAll={handleFitAll}

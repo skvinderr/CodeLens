@@ -1,4 +1,15 @@
-export type GraphViewMode = 'force' | 'radial' | 'hierarchical' | 'heatmap'
+export type GraphViewMode =
+  | 'force'
+  | 'radial'
+  | 'hierarchical'
+  | 'heatmap'
+  | 'ownership'
+
+export interface OwnershipLegendItem {
+  login: string
+  color: string
+  files: number
+}
 
 export interface GraphControlsProps {
   zoomLevel: number
@@ -7,6 +18,7 @@ export interface GraphControlsProps {
   detectedLanguages: string[]
   hiddenLanguages: string[]
   searchQuery: string
+  ownershipLegend: OwnershipLegendItem[]
   onZoomIn: () => void
   onZoomOut: () => void
   onFitAll: () => void
@@ -24,6 +36,7 @@ const VIEW_MODES: Array<{ value: GraphViewMode; label: string }> = [
   { value: 'radial', label: 'Radial' },
   { value: 'hierarchical', label: 'Hierarchical' },
   { value: 'heatmap', label: 'Heatmap' },
+  { value: 'ownership', label: 'Ownership' },
 ]
 
 export function GraphControls({
@@ -33,6 +46,7 @@ export function GraphControls({
   detectedLanguages,
   hiddenLanguages,
   searchQuery,
+  ownershipLegend,
   onZoomIn,
   onZoomOut,
   onFitAll,
@@ -78,6 +92,29 @@ export function GraphControls({
           </button>
         ))}
       </div>
+
+      {viewMode === 'ownership' ? (
+        <div className="graph-controls-ownership" aria-label="Ownership legend">
+          <p className="graph-controls-meta">Contributor ownership</p>
+          {ownershipLegend.length === 0 ? (
+            <p className="graph-controls-empty">No contributor ownership data.</p>
+          ) : (
+            <ul className="graph-ownership-legend list-reset">
+              {ownershipLegend.map((item) => (
+                <li key={item.login}>
+                  <span
+                    className="graph-ownership-swatch"
+                    style={{ backgroundColor: item.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="graph-ownership-name">@{item.login}</span>
+                  <span className="graph-ownership-files">{item.files}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       <div className="graph-controls-filter-row">
         <button type="button" onClick={onToggleOrphans}>

@@ -69,6 +69,32 @@ export interface FileContributors {
   totalCommits: number
 }
 
+export interface ContributorOwnershipShare {
+  login: string
+  commits: number
+  weightedCommits: number
+  share: number
+  lastCommit: Date
+}
+
+export interface FileBusFactorRisk {
+  filePath: string
+  uniqueContributors: number
+  busFactor: number
+  topContributor: string | null
+  topShare: number
+  isSingleOwnerRisk: boolean
+  ownership: ContributorOwnershipShare[]
+}
+
+export interface BusFactorAnalysis {
+  files: FileBusFactorRisk[]
+  totalFiles: number
+  singleOwnerFiles: number
+  globalSingleOwnerPercent: number
+  riskLevel: 'low' | 'medium' | 'high'
+}
+
 export type AlertType =
   | 'api-key'
   | 'private-key'
@@ -113,6 +139,7 @@ export interface HealthScore {
   overall: number
   categories: HealthCategories
   breakdown: HealthFinding[]
+  busFactor?: BusFactorAnalysis
 
   // Compatibility fields for initial scaffold components.
   maintainability?: number
@@ -134,6 +161,7 @@ export interface AnalysisResult {
   graph: GraphData
   contributors: Map<string, FileContributors>
   health: HealthScore
+  busFactor?: BusFactorAnalysis
   security: SecurityAlert[]
   circularDeps: string[][]
   techStack: TechStack

@@ -273,6 +273,51 @@ body {
   background: rgba(16, 90, 108, 0.68);
 }
 
+.graph-controls-ownership {
+  border: 1px solid rgba(133, 166, 197, 0.35);
+  border-radius: 10px;
+  padding: 0.35rem;
+  background: rgba(10, 24, 38, 0.45);
+}
+
+.graph-controls-empty {
+  margin: 0.25rem 0 0;
+  color: #9fc3df;
+  font: 500 0.68rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.graph-ownership-legend {
+  margin-top: 0.35rem;
+  gap: 0.24rem;
+}
+
+.graph-ownership-legend li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.graph-ownership-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(221, 239, 255, 0.28);
+}
+
+.graph-ownership-name {
+  color: #e6f4ff;
+  font: 500 0.68rem/1.1 'IBM Plex Mono', ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-ownership-files {
+  color: #8fb2cf;
+  font: 600 0.64rem/1 'IBM Plex Mono', ui-monospace, monospace;
+}
+
 .graph-controls-language-chips button.is-dimmed {
   opacity: 0.4;
 }
@@ -369,6 +414,158 @@ body {
 .panel-body {
   color: var(--cl-muted);
   font-size: 0.9rem;
+}
+
+.contributors-selected-header {
+  margin-bottom: 0.45rem;
+}
+
+.contributors-section-title {
+  margin: 0;
+  font: 600 0.78rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+  color: var(--cl-muted);
+  letter-spacing: 0.02em;
+}
+
+.contributors-selected-file {
+  margin: 0.2rem 0 0;
+  font: 600 0.9rem/1.15 'IBM Plex Mono', ui-monospace, monospace;
+  color: var(--cl-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contributors-owner-list {
+  margin-bottom: 0.55rem;
+  gap: 0.42rem;
+}
+
+.contributors-owner-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.owner-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(139, 165, 190, 0.5);
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.owner-avatar-fallback {
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font: 700 0.66rem/1 'IBM Plex Mono', ui-monospace, monospace;
+  text-transform: uppercase;
+}
+
+.contributors-owner-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.contributors-owner-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.contributors-owner-name {
+  font: 600 0.8rem/1.1 'IBM Plex Mono', ui-monospace, monospace;
+  color: var(--cl-text);
+}
+
+.contributors-owner-date {
+  color: var(--cl-muted);
+  font: 500 0.68rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.contributors-ownership-bar {
+  margin: 0.55rem 0;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(130, 156, 184, 0.24);
+  display: flex;
+}
+
+.contributors-ownership-segment {
+  height: 100%;
+}
+
+.contributors-all-list {
+  margin-top: 0.45rem;
+  border-top: 1px dashed var(--cl-border);
+  padding-top: 0.45rem;
+}
+
+.contributors-all-list summary {
+  cursor: pointer;
+  color: var(--cl-accent-strong);
+  font: 600 0.73rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+  list-style: none;
+}
+
+.contributors-all-list summary::-webkit-details-marker {
+  display: none;
+}
+
+.contributors-all-item {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.contributors-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.contributors-all-name {
+  font: 500 0.72rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+  color: var(--cl-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contributors-all-count,
+.contributors-all-share {
+  font: 600 0.68rem/1.1 'IBM Plex Mono', ui-monospace, monospace;
+  color: var(--cl-muted);
+}
+
+.bus-factor-card {
+  margin-top: 0.55rem;
+  border: 1px solid var(--cl-border);
+  border-radius: 12px;
+  padding: 0.55rem;
+  background: rgba(252, 255, 255, 0.66);
+}
+
+.dark .bus-factor-card {
+  background: rgba(17, 26, 38, 0.86);
+}
+
+.bus-factor-summary {
+  margin: 0 0 0.45rem;
+}
+
+.bus-factor-risk-list {
+  margin-top: 0.45rem;
+}
+
+.bus-factor-warning-icon {
+  color: #d54646;
 }
 
 .blast-header {

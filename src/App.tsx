@@ -15,9 +15,15 @@ import { TokenInput } from '@/components/ui/TokenInput'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useGitHub } from '@/hooks/useGitHub'
 import { useGraph } from '@/hooks/useGraph'
+import { analyzeBusFactor } from '@/lib/analysis/busFactor'
 import { calculateBlastRadius } from '@/lib/graph/blastRadius'
 import { useAppStore } from '@/store/useAppStore'
-import type { CodeLensFileNode, Contributor } from '@/types'
+import type {
+  CodeLensFileNode,
+  Contributor,
+  FileContributors,
+  GraphNode,
+} from '@/types'
 
 const PLACEHOLDER_FILES: CodeLensFileNode[] = [
   {
@@ -72,6 +78,52 @@ function App() {
   const { status: analysisStatus, findings, health } = useAnalysis()
 
   const graphForBlast = analysisResult?.graph ?? graph
+
+  const selectedNode = useMemo<GraphNode | null>(() => {
+    if (!selectedNodeId) {
+      return null
+    }
+
+    return graphForBlast.nodes.find((node) => node.id === selectedNodeId) ?? null
+  }, [graphForBlast.nodes, selectedNodeId])
+
+  const fallbackContributorsByFile = useMemo(() => {
+    if (!selectedNode) {
+      return null
+    }
+
+    const filePath = selectedNode.path || selectedNode.filePath || selectedNode.id
+    const totalCommits = PLACEHOLDER_CONTRIBUTORS.reduce(
+      (sum, contributor) => sum + contributor.commits,
+      0,
+    )
+
+    return new Map<string, FileContributors>([
+      [
+        filePath,
+        {
+          filePath,
+          contributors: PLACEHOLDER_CONTRIBUTORS,
+          totalCommits,
+        },
+      ],
+    ])
+  }, [selectedNode])
+
+  const contributorsByFile =
+    analysisResult?.contributors && analysisResult.contributors.size > 0
+      ? analysisResult.contributors
+      : fallbackContributorsByFile
+
+  const busFactor = useMemo(() => {
+    if (!analysisResult || analysisResult.contributors.size === 0) {
+      return null
+    }
+
+    return analyzeBusFactor(analysisResult.graph.nodes, analysisResult.contributors)
+  }, [analysisResult])
+
+  const resolvedHealth = health ?? analysisResult?.health ?? null
 
   const blastRadiusResult = useMemo(() => {
     if (!selectedNodeId || graphForBlast.nodes.length === 0) {
@@ -145,8 +197,12 @@ function App() {
         </section>
 
         <Sidebar title="Insights">
-          <ContributorsPanel contributors={PLACEHOLDER_CONTRIBUTORS} />
-          <HealthPanel score={health} />
+          <ContributorsPanel
+            selectedNode={selectedNode}
+            contributorsByFile={contributorsByFile}
+            fallbackContributors={PLACEHOLDER_CONTRIBUTORS}
+          />
+          <HealthPanel score={resolvedHealth} busFactor={busFactor} />
           <SecurityPanel findings={findings} />
           <BlastRadiusPanel
             result={blastRadiusResult}
