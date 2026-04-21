@@ -115,6 +115,9 @@ function App() {
       ? analysisResult.contributors
       : fallbackContributorsByFile
 
+  const resolvedSecurityFindings =
+    findings.length > 0 ? findings : analysisResult?.security ?? []
+
   const busFactor = useMemo(() => {
     if (!analysisResult || analysisResult.contributors.size === 0) {
       return null
@@ -203,7 +206,7 @@ function App() {
             fallbackContributors={PLACEHOLDER_CONTRIBUTORS}
           />
           <HealthPanel score={resolvedHealth} busFactor={busFactor} />
-          <SecurityPanel findings={findings} />
+          <SecurityPanel findings={resolvedSecurityFindings} />
           <BlastRadiusPanel
             result={blastRadiusResult}
             nodes={graphForBlast.nodes}
