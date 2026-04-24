@@ -5,6 +5,14 @@ import { calculateBlastRadius } from '@/lib/graph/blastRadius'
 import type { AnalysisResult, AnalysisStage, AppMode, GraphLink, GraphNode } from '@/types'
 
 type SidebarPanel = 'tree' | 'contributors' | 'health' | 'security' | 'blast'
+export type GraphLayoutMode = 'force' | 'radial' | 'hierarchical' | 'cluster'
+export type GraphOverlayMode =
+  | 'language'
+  | 'blast'
+  | 'size'
+  | 'age'
+  | 'tests'
+  | 'ownership'
 
 interface GraphFilter {
   languages: string[]
@@ -24,6 +32,8 @@ interface AppStoreState {
   highlightedLinks: Set<string>
   graphFilter: GraphFilter
   sidebarPanel: SidebarPanel
+  graphLayout: GraphLayoutMode
+  graphOverlay: GraphOverlayMode
   stages: AnalysisStage[]
   error: string | null
   theme: 'light' | 'dark'
@@ -39,6 +49,9 @@ interface AppStoreActions {
   clearSelection: () => void
   updateStage: (id: string, patch: Partial<Omit<AnalysisStage, 'id'>>) => void
   setGraphFilter: (partial: Partial<GraphFilter>) => void
+  setSidebarPanel: (panel: SidebarPanel) => void
+  setGraphLayout: (layout: GraphLayoutMode) => void
+  setGraphOverlay: (overlay: GraphOverlayMode) => void
   toggleTheme: () => void
 }
 
@@ -92,6 +105,8 @@ export const useAppStore = create<AppStore>()(
       highlightedLinks: new Set<string>(),
       graphFilter: { ...DEFAULT_GRAPH_FILTER },
       sidebarPanel: 'tree',
+      graphLayout: 'force',
+      graphOverlay: 'language',
       stages: [],
       error: null,
       theme: 'dark',
@@ -207,6 +222,21 @@ export const useAppStore = create<AppStore>()(
           state.graphFilter = { ...state.graphFilter, ...partial }
         }),
 
+      setSidebarPanel: (sidebarPanel) =>
+        set((state) => {
+          state.sidebarPanel = sidebarPanel
+        }),
+
+      setGraphLayout: (graphLayout) =>
+        set((state) => {
+          state.graphLayout = graphLayout
+        }),
+
+      setGraphOverlay: (graphOverlay) =>
+        set((state) => {
+          state.graphOverlay = graphOverlay
+        }),
+
       toggleTheme: () =>
         set((state) => {
           state.theme = state.theme === 'dark' ? 'light' : 'dark'
@@ -280,6 +310,9 @@ export const useAppStore = create<AppStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         githubToken: state.githubToken,
+        graphLayout: state.graphLayout,
+        graphOverlay: state.graphOverlay,
+        sidebarPanel: state.sidebarPanel,
         theme: state.theme,
       }),
     },

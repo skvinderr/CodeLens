@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { exportBlastReport as downloadBlastReport } from '@/utils/exportUtils'
 import type { BlastPathEntry, BlastRadiusResult, GraphNode } from '@/types'
 
 export interface BlastRadiusPanelProps {
@@ -66,28 +67,19 @@ export function BlastRadiusPanel({
       return
     }
 
-    const payload = {
-      generatedAt: new Date().toISOString(),
-      seedNodeId: result.seedNodeId,
-      score: result.score,
-      maxDepth: result.maxDepth,
-      impactedNodeIds: result.impactedNodeIds,
-      impactedEdgeIds: result.impactedEdgeIds,
-      affected: [...result.affected.values()],
-      dependents: result.dependents,
-      dependencies: result.dependencies,
-    }
-
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: 'application/json',
+    const rows = entries.map((entry) => {
+      const node = nodeById.get(entry.nodeId)
+      return {
+        filePath: node ? getNodePath(node) : entry.nodeId,
+        distance: entry.distance,
+        contribution: Math.max(0, result.score / Math.max(1, entry.distance + 1)),
+      }
     })
 
-    const url = window.URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `blast-report-${result.seedNodeId.replace(/[\\/:*?"<>|]/g, '_')}.json`
-    anchor.click()
-    window.URL.revokeObjectURL(url)
+    downloadBlastReport(
+      selectedNode ? getNodeFilename(selectedNode) : result.seedNodeId,
+      rows,
+    )
   }
 
   return (
