@@ -19,6 +19,9 @@ export function NodeTooltip({ node, visible }: NodeTooltipProps) {
       <p className="panel-body">{path}</p>
       <p className="panel-body">Language: {node.language || 'unknown'}</p>
       <p className="panel-body">Size: {node.size} bytes</p>
+      {node.contentUnavailable ? (
+        <p className="panel-body">Content unavailable</p>
+      ) : null}
     </section>
   )
 }

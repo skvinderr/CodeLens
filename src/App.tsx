@@ -9,7 +9,6 @@ import { ContributorsPanel } from '@/components/panels/ContributorsPanel'
 import { FileTreePanel } from '@/components/panels/FileTreePanel'
 import { HealthPanel } from '@/components/panels/HealthPanel'
 import { SecurityPanel } from '@/components/panels/SecurityPanel'
-import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ProgressOverlay } from '@/components/ui/ProgressOverlay'
 import { TokenInput } from '@/components/ui/TokenInput'
@@ -66,7 +65,6 @@ const PLACEHOLDER_CONTRIBUTORS: Contributor[] = [
 ]
 
 function App() {
-  const [isOverlayVisible, setIsOverlayVisible] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [isShortcutModalOpen, setIsShortcutModalOpen] = useState(false)
@@ -74,8 +72,10 @@ function App() {
 
   const mode = useAppStore((state) => state.mode)
   const error = useAppStore((state) => state.error)
+  const warning = useAppStore((state) => state.warning)
   const selectNode = useAppStore((state) => state.selectNode)
   const clearSelection = useAppStore((state) => state.clearSelection)
+  const clearError = useAppStore((state) => state.clearError)
   const selectedNodeId = useAppStore((state) => state.selectedNodeId)
   const analysisResult = useAppStore((state) => state.analysisResult)
   const theme = useAppStore((state) => state.theme)
@@ -86,10 +86,18 @@ function App() {
   const setSidebarPanel = useAppStore((state) => state.setSidebarPanel)
   const graphLayout = useAppStore((state) => state.graphLayout)
   const setGraphLayout = useAppStore((state) => state.setGraphLayout)
+  const stages = useAppStore((state) => state.stages)
+  const setError = useAppStore((state) => state.setError)
 
   const { graph } = useGraph()
-  const { token, setToken } = useGitHub()
-  const { status: analysisStatus, findings, health, runAnalysis } = useAnalysis()
+  const { token, setToken, abortActiveRequests } = useGitHub()
+  const {
+    status: analysisStatus,
+    findings,
+    health,
+    runAnalysis,
+    skipContributors,
+  } = useAnalysis()
 
   const graphForBlast = analysisResult?.graph ?? graph
 
@@ -161,6 +169,24 @@ function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
+
+  useEffect(() => {
+    if (!navigator.onLine) {
+      setError('You are offline. Results from cache are still available.')
+    }
+
+    const handleOffline = () =>
+      setError('You are offline. Results from cache are still available.')
+    const handleOnline = () => clearError()
+
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+
+    return () => {
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [clearError, setError])
 
   useEffect(() => {
     if (!toastMessage) {
@@ -323,6 +349,9 @@ function App() {
     if (error) {
       return error
     }
+    if (warning) {
+      return warning
+    }
 
     const modeLabelMap: Record<typeof mode, string> = {
       idle: 'Idle',
@@ -332,7 +361,7 @@ function App() {
     }
 
     return `Mode: ${modeLabelMap[mode]}`
-  }, [error, mode])
+  }, [error, mode, warning])
 
   const fileTreeNodes = useMemo<CodeLensFileNode[]>(() => {
     if (!analysisResult) {
@@ -430,13 +459,6 @@ function App() {
             onChange={setToken}
           />
 
-          <Button
-            variant="secondary"
-            onClick={() => setIsOverlayVisible((current) => !current)}
-          >
-            Toggle Progress Overlay
-          </Button>
-
           {showPanel('tree') ? (
             <FileTreePanel files={fileTreeNodes} />
           ) : (
@@ -447,13 +469,33 @@ function App() {
         </Sidebar>
 
         <section className="workspace-column">
-          {graph.nodes.length === 0 ? (
+          {analysisResult && analysisResult.files.length === 0 ? (
+            <EmptyState
+              title="No source files detected"
+              description="Try a different repository."
+            />
+          ) : analysisResult && analysisResult.graph.nodes.length > 0 && graph.nodes.length === 0 ? (
+            <EmptyState
+              title="No files match current filters"
+              description="Clear filters to show all."
+            />
+          ) : graph.nodes.length === 0 ? (
             <EmptyState
               title="No Graph Yet"
               description="Connect a repository to render dependencies and impact paths."
             />
           ) : (
-            <GraphCanvas nodes={graph.nodes} edges={graph.edges} />
+            <div className="graph-stage-shell">
+              <GraphCanvas nodes={graph.nodes} edges={graph.edges} />
+              <ProgressOverlay
+                isVisible={mode === 'loading'}
+                repo={analysisResult?.repo ?? null}
+                stages={stages}
+                onCancel={abortActiveRequests}
+                onSkipContributors={skipContributors}
+                onViewResults={() => setToastMessage('Analysis complete')}
+              />
+            </div>
           )}
 
           <StatusBar
@@ -492,12 +534,6 @@ function App() {
           ) : null}
         </Sidebar>
       </main>
-
-      <ProgressOverlay
-        isVisible={isOverlayVisible}
-        message="Running placeholder analysis pipeline..."
-        progress={40}
-      />
 
       {toastMessage ? <div className="app-toast">{toastMessage}</div> : null}
 

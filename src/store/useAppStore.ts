@@ -36,6 +36,7 @@ interface AppStoreState {
   graphOverlay: GraphOverlayMode
   stages: AnalysisStage[]
   error: string | null
+  warning: string | null
   theme: 'light' | 'dark'
 }
 
@@ -44,10 +45,14 @@ interface AppStoreActions {
   setGithubToken: (value: string) => void
   setMode: (mode: AppMode) => void
   setError: (message: string | null) => void
+  clearError: () => void
+  setWarning: (message: string | null) => void
   setAnalysisResult: (result: AnalysisResult | null) => void
   selectNode: (id: string | null) => void
   clearSelection: () => void
+  resetApp: () => void
   updateStage: (id: string, patch: Partial<Omit<AnalysisStage, 'id'>>) => void
+  setStages: (stages: AnalysisStage[]) => void
   setGraphFilter: (partial: Partial<GraphFilter>) => void
   setSidebarPanel: (panel: SidebarPanel) => void
   setGraphLayout: (layout: GraphLayoutMode) => void
@@ -69,6 +74,26 @@ const DEFAULT_GRAPH_FILTER: GraphFilter = {
   minSize: 0,
   maxConnections: Number.POSITIVE_INFINITY,
   showOrphans: true,
+}
+
+let visibleNodesCache: {
+  result: GraphNode[]
+  analysisResult: AnalysisResult | null
+  graphFilter: GraphFilter | null
+} = {
+  result: [],
+  analysisResult: null,
+  graphFilter: null,
+}
+
+let visibleLinksCache: {
+  result: GraphLink[]
+  analysisResult: AnalysisResult | null
+  graphFilter: GraphFilter | null
+} = {
+  result: [],
+  analysisResult: null,
+  graphFilter: null,
 }
 
 const getLinksFromResult = (result: AnalysisResult | null): GraphLink[] => {
@@ -109,6 +134,7 @@ export const useAppStore = create<AppStore>()(
       graphOverlay: 'language',
       stages: [],
       error: null,
+      warning: null,
       theme: 'dark',
 
       setRepoInput: (repoInput) =>
@@ -134,16 +160,31 @@ export const useAppStore = create<AppStore>()(
           }
         }),
 
+      clearError: () =>
+        set((state) => {
+          state.error = null
+          if (state.mode === 'error') {
+            state.mode = state.analysisResult ? 'ready' : 'idle'
+          }
+        }),
+
+      setWarning: (warning) =>
+        set((state) => {
+          state.warning = warning
+        }),
+
       setAnalysisResult: (result) =>
         set((state) => {
           if (!result) {
             state.analysisResult = null
             state.mode = 'idle'
             state.error = null
+            state.warning = null
             state.selectedNodeId = null
             state.hoveredNodeId = null
             state.blastRadiusIds = new Set<string>()
             state.highlightedLinks = new Set<string>()
+            state.stages = []
             return
           }
 
@@ -159,6 +200,10 @@ export const useAppStore = create<AppStore>()(
           state.analysisResult = normalizedResult
           state.mode = 'ready'
           state.error = null
+          state.warning =
+            normalizedResult.skippedFiles && normalizedResult.skippedFiles.length > 0
+              ? `Analysis complete - ${normalizedResult.skippedFiles.length} files skipped due to errors`
+              : null
           state.selectedNodeId = null
           state.hoveredNodeId = null
           state.blastRadiusIds = new Set<string>()
@@ -201,6 +246,19 @@ export const useAppStore = create<AppStore>()(
           state.highlightedLinks = new Set<string>()
         }),
 
+      resetApp: () =>
+        set((state) => {
+          state.mode = 'idle'
+          state.error = null
+          state.warning = null
+          state.analysisResult = null
+          state.selectedNodeId = null
+          state.hoveredNodeId = null
+          state.blastRadiusIds = new Set<string>()
+          state.highlightedLinks = new Set<string>()
+          state.stages = []
+        }),
+
       updateStage: (id, patch) =>
         set((state) => {
           const stage = state.stages.find((item) => item.id === id)
@@ -220,6 +278,11 @@ export const useAppStore = create<AppStore>()(
       setGraphFilter: (partial) =>
         set((state) => {
           state.graphFilter = { ...state.graphFilter, ...partial }
+        }),
+
+      setStages: (stages) =>
+        set((state) => {
+          state.stages = stages
         }),
 
       setSidebarPanel: (sidebarPanel) =>
@@ -250,7 +313,14 @@ export const useAppStore = create<AppStore>()(
           return []
         }
 
-        return analysisResult.graph.nodes.filter((node) => {
+        if (
+          visibleNodesCache.analysisResult === analysisResult &&
+          visibleNodesCache.graphFilter === graphFilter
+        ) {
+          return visibleNodesCache.result
+        }
+
+        const result = analysisResult.graph.nodes.filter((node) => {
           const languageMatch =
             graphFilter.languages.length === 0 ||
             graphFilter.languages.includes(node.language)
@@ -260,20 +330,44 @@ export const useAppStore = create<AppStore>()(
 
           return languageMatch && sizeMatch && connectionMatch && orphanMatch
         })
+
+        visibleNodesCache = {
+          result,
+          analysisResult,
+          graphFilter,
+        }
+
+        return result
       },
 
       selectVisibleLinks: () => {
-        const visibleNodeIds = new Set(get().selectVisibleNodes().map((n) => n.id))
-        const links = getLinksFromResult(get().analysisResult)
+        const state = get()
+        const visibleNodeIds = new Set(state.selectVisibleNodes().map((n) => n.id))
+        const links = getLinksFromResult(state.analysisResult)
 
         if (visibleNodeIds.size === 0 || links.length === 0) {
           return []
         }
 
-        return links.filter(
+        if (
+          visibleLinksCache.analysisResult === state.analysisResult &&
+          visibleLinksCache.graphFilter === state.graphFilter
+        ) {
+          return visibleLinksCache.result
+        }
+
+        const result = links.filter(
           (link) =>
             visibleNodeIds.has(link.source) && visibleNodeIds.has(link.target),
         )
+
+        visibleLinksCache = {
+          result,
+          analysisResult: state.analysisResult,
+          graphFilter: state.graphFilter,
+        }
+
+        return result
       },
 
       selectSelectedNode: () => {

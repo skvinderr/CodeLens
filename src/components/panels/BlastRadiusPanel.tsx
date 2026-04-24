@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { exportBlastReport as downloadBlastReport } from '@/utils/exportUtils'
 import type { BlastPathEntry, BlastRadiusResult, GraphNode } from '@/types'
 
@@ -39,7 +39,7 @@ function distanceBadgeClass(distance: number): string {
   return `blast-distance-badge blast-distance-${depth}`
 }
 
-export function BlastRadiusPanel({
+function BlastRadiusPanelComponent({
   result,
   nodes,
   onSelectNode,
@@ -185,7 +185,7 @@ export function BlastRadiusPanel({
               })}
             </ul>
           ) : (
-            <p className="panel-body">No files in this impact branch.</p>
+            <p className="panel-body">This file has no dependents - safe to modify without side effects.</p>
           )}
 
           <button type="button" className="btn btn-secondary" onClick={exportBlastReport}>
@@ -198,3 +198,5 @@ export function BlastRadiusPanel({
     </section>
   )
 }
+
+export const BlastRadiusPanel = memo(BlastRadiusPanelComponent)

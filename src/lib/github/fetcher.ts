@@ -30,6 +30,31 @@ const EXCLUDED_BINARY_EXTENSIONS = new Set([
 const MAX_TREE_FILES = 500
 const MAX_FILE_SIZE_BYTES = 500 * 1024
 
+export class GitHubError extends Error {
+  code:
+    | 'NOT_FOUND'
+    | 'RATE_LIMITED'
+    | 'PRIVATE'
+    | 'NETWORK'
+    | 'TOO_LARGE'
+    | 'INVALID_URL'
+
+  constructor(
+    code:
+      | 'NOT_FOUND'
+      | 'RATE_LIMITED'
+      | 'PRIVATE'
+      | 'NETWORK'
+      | 'TOO_LARGE'
+      | 'INVALID_URL',
+    message: string,
+  ) {
+    super(message)
+    this.code = code
+    this.name = 'GitHubError'
+  }
+}
+
 export interface FileTreeProgress {
   current: number
   total: number
@@ -45,8 +70,14 @@ export interface RepositoryTreeEntry {
 
 export class GitHubFetcher {
   private readonly octokit: Octokit
+  private treeTrimmed = false
+  private readonly signal?: AbortSignal
 
-  constructor(token?: string) {
+  constructor(
+    token?: string,
+    signal?: AbortSignal,
+  ) {
+    this.signal = signal
     this.octokit = new Octokit({
       auth: token,
       userAgent: 'CodeLens/0.1.0',
@@ -59,7 +90,7 @@ export class GitHubFetcher {
     const trimmedUrl = url.trim()
 
     if (!trimmedUrl) {
-      throw new Error('Repository URL is required.')
+      throw new GitHubError('INVALID_URL', 'Repository URL is required.')
     }
 
     const normalizedUrl = /^https?:\/\//i.test(trimmedUrl)
@@ -70,11 +101,11 @@ export class GitHubFetcher {
     try {
       parsedUrl = new URL(normalizedUrl)
     } catch {
-      throw new Error(`Invalid GitHub URL: "${url}".`)
+      throw new GitHubError('INVALID_URL', `Invalid GitHub URL: "${url}".`)
     }
 
     if (!/(^|\.)github\.com$/i.test(parsedUrl.hostname)) {
-      throw new Error('Only github.com repository URLs are supported.')
+      throw new GitHubError('INVALID_URL', 'Only github.com repository URLs are supported.')
     }
 
     const segments = parsedUrl.pathname
@@ -83,7 +114,8 @@ export class GitHubFetcher {
       .filter(Boolean)
 
     if (segments.length < 2) {
-      throw new Error(
+      throw new GitHubError(
+        'INVALID_URL',
         'Invalid GitHub repository URL. Expected format: github.com/{owner}/{repo}.',
       )
     }
@@ -92,7 +124,7 @@ export class GitHubFetcher {
     const repoName = decodeURIComponent(segments[1]).replace(/\.git$/i, '')
 
     if (!owner || !repoName) {
-      throw new Error('Repository owner and name could not be parsed from URL.')
+      throw new GitHubError('INVALID_URL', 'Repository owner and name could not be parsed from URL.')
     }
 
     let metadata
@@ -100,23 +132,11 @@ export class GitHubFetcher {
       const response = await this.octokit.repos.get({
         owner,
         repo: repoName,
+        request: { signal: this.signal },
       })
       metadata = response.data
     } catch (error) {
-      const status =
-        typeof error === 'object' && error !== null && 'status' in error
-          ? Number((error as { status?: number }).status ?? 0)
-          : 0
-
-      if (status === 404) {
-        throw new Error(
-          `Repository "${owner}/${repoName}" was not found or is not accessible with the current token.`,
-        )
-      }
-
-      throw new Error(
-        `Failed to fetch repository metadata for "${owner}/${repoName}".`,
-      )
+      this.throwAsGitHubError(error, `Failed to fetch repository metadata for "${owner}/${repoName}".`)
     }
 
     let branch = metadata.default_branch
@@ -125,7 +145,8 @@ export class GitHubFetcher {
       const branchSegments = segments.slice(3).map((segment) => decodeURIComponent(segment))
 
       if (branchSegments.length === 0) {
-        throw new Error(
+        throw new GitHubError(
+          'INVALID_URL',
           'Invalid tree URL. Expected format: github.com/{owner}/{repo}/tree/{branch}/{path}.',
         )
       }
@@ -155,6 +176,7 @@ export class GitHubFetcher {
       owner: repo.owner,
       repo: repo.name,
       branch,
+      request: { signal: this.signal },
     })
 
     const treeSha = branchResponse.data.commit.commit.tree.sha
@@ -163,6 +185,7 @@ export class GitHubFetcher {
       repo: repo.name,
       tree_sha: treeSha,
       recursive: '1',
+      request: { signal: this.signal },
     })
 
     const filteredEntries: RepositoryTreeEntry[] = []
@@ -185,10 +208,7 @@ export class GitHubFetcher {
 
     let resultEntries = filteredEntries
     if (resultEntries.length > MAX_TREE_FILES) {
-      console.warn(
-        `[CodeLens] Repository has ${resultEntries.length} eligible files. Keeping the ${MAX_TREE_FILES} largest files.`,
-      )
-
+      this.treeTrimmed = true
       resultEntries = [...resultEntries]
         .sort((left, right) => (right.size ?? 0) - (left.size ?? 0))
         .slice(0, MAX_TREE_FILES)
@@ -218,6 +238,7 @@ export class GitHubFetcher {
       repo: repo.name,
       path,
       ref: repo.branch || repo.defaultBranch,
+      request: { signal: this.signal },
     })
 
     const { data } = response
@@ -226,7 +247,7 @@ export class GitHubFetcher {
     }
 
     if ((data.size ?? 0) > MAX_FILE_SIZE_BYTES) {
-      return null
+      throw new GitHubError('TOO_LARGE', `"${path}" is larger than the supported file limit.`)
     }
 
     const decoded = this.decodeBase64(data.content)
@@ -244,6 +265,7 @@ export class GitHubFetcher {
         path,
         per_page: 10,
         sha: repo.branch || repo.defaultBranch,
+        request: { signal: this.signal },
       })
       commits = response.data
     } catch (error) {
@@ -256,8 +278,9 @@ export class GitHubFetcher {
         return []
       }
 
-      throw new Error(
-        `Failed to fetch contributors for "${path}" in ${repo.owner}/${repo.name}.`,
+      this.throwAsGitHubError(
+        error,
+        `Failed to fetch contributors for "${path}" in ${repo.owner}/${repo.name}".`,
       )
     }
 
@@ -315,6 +338,7 @@ export class GitHubFetcher {
         owner,
         repo: repoName,
         per_page: 100,
+        request: { signal: this.signal },
       })
       const branchNames = new Set(response.data.map((branch) => branch.name))
 
@@ -375,5 +399,46 @@ export class GitHubFetcher {
     }
 
     sessionStorage.setItem(cacheKey, content)
+  }
+
+  wasTreeTrimmed(): boolean {
+    return this.treeTrimmed
+  }
+
+  private throwAsGitHubError(error: unknown, fallbackMessage: string): never {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'name' in error &&
+      (error as { name?: string }).name === 'AbortError'
+    ) {
+      throw new DOMException('Request aborted', 'AbortError')
+    }
+
+    const status =
+      typeof error === 'object' && error !== null && 'status' in error
+        ? Number((error as { status?: number }).status ?? 0)
+        : 0
+
+    if (status === 404) {
+      throw new GitHubError('NOT_FOUND', fallbackMessage)
+    }
+    if (status === 401 || status === 403) {
+      const message =
+        typeof error === 'object' && error !== null && 'message' in error
+          ? String((error as { message?: string }).message ?? '')
+          : ''
+
+      if (/rate limit/i.test(message)) {
+        throw new GitHubError('RATE_LIMITED', fallbackMessage)
+      }
+
+      throw new GitHubError('PRIVATE', fallbackMessage)
+    }
+    if (status === 413) {
+      throw new GitHubError('TOO_LARGE', fallbackMessage)
+    }
+
+    throw new GitHubError('NETWORK', fallbackMessage)
   }
 }

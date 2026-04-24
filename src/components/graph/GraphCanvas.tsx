@@ -226,6 +226,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   const simulationRef = useRef<d3.Simulation<SimulationNode, undefined> | null>(null)
   const simulationNodesRef = useRef<GraphNode[]>([])
@@ -296,6 +297,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       ),
     [edges, filteredNodeIds],
   )
+  const renderMode = filteredNodes.length > 200 ? 'canvas' : 'svg'
 
   const contributorsByPath = useMemo(() => {
     if (!contributorsByFile || contributorsByFile.size === 0) {
@@ -727,6 +729,98 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     [applyZoomTransform, viewport.height, viewport.width],
   )
 
+  const drawCanvas = useCallback(
+    (simulationNodes: SimulationNode[], simulationLinks: SimulationLink[]) => {
+      const canvas = canvasRef.current
+      if (!canvas || renderMode !== 'canvas') {
+        return
+      }
+
+      const context = canvas.getContext('2d')
+      if (!context) {
+        return
+      }
+
+      const ratio = window.devicePixelRatio || 1
+      if (canvas.width !== Math.floor(viewport.width * ratio)) {
+        canvas.width = Math.floor(viewport.width * ratio)
+        canvas.height = Math.floor(viewport.height * ratio)
+        canvas.style.width = `${viewport.width}px`
+        canvas.style.height = `${viewport.height}px`
+      }
+
+      context.setTransform(ratio, 0, 0, ratio, 0, 0)
+      context.clearRect(0, 0, viewport.width, viewport.height)
+      context.save()
+      const transform = zoomTransformRef.current
+      context.translate(transform.x, transform.y)
+      context.scale(transform.k, transform.k)
+
+      context.lineCap = 'round'
+      context.globalAlpha = 0.45
+      for (const link of simulationLinks) {
+        const source = typeof link.source === 'string' ? nodeMapRef.current.get(link.source) : link.source
+        const target = typeof link.target === 'string' ? nodeMapRef.current.get(link.target) : link.target
+        if (!source || !target) {
+          continue
+        }
+        context.beginPath()
+        context.strokeStyle = '#6e8196'
+        context.lineWidth = clamp(link.weight ?? 1, 1, 3)
+        context.moveTo(source.x ?? 0, source.y ?? 0)
+        context.lineTo(target.x ?? 0, target.y ?? 0)
+        context.stroke()
+      }
+
+      context.globalAlpha = 1
+      for (const node of simulationNodes) {
+        const color = node.contentUnavailable
+          ? '#7b8794'
+          : nodeColorByOverlay(node, overlayMode, {
+              ageExtent,
+              ownershipColorByContributor,
+              topContributorByNodeId,
+              testablePaths,
+            })
+        const radius = defaultNodeRadius(node)
+        context.beginPath()
+        if (node.contentUnavailable) {
+          context.setLineDash([4, 3])
+        } else {
+          context.setLineDash([])
+        }
+        context.fillStyle = color
+        context.strokeStyle = darkenHex(color, 0.24)
+        context.lineWidth = selectedNodeId === node.id ? 4 : 2
+        context.arc(node.x ?? 0, node.y ?? 0, radius, 0, Math.PI * 2)
+        context.fill()
+        context.stroke()
+        context.setLineDash([])
+
+        if (zoomLevel >= 1.5) {
+          context.fillStyle = '#9eb2c6'
+          context.font = "10px 'IBM Plex Mono'"
+          context.textAlign = 'center'
+          context.fillText(getNodeFilename(node), node.x ?? 0, (node.y ?? 0) + radius + 14)
+        }
+      }
+
+      context.restore()
+    },
+    [
+      ageExtent,
+      overlayMode,
+      ownershipColorByContributor,
+      renderMode,
+      selectedNodeId,
+      testablePaths,
+      topContributorByNodeId,
+      viewport.height,
+      viewport.width,
+      zoomLevel,
+    ],
+  )
+
   const handleZoomDelta = useCallback(
     (factor: number) => {
       if (viewport.width <= 0 || viewport.height <= 0) {
@@ -920,7 +1014,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       })
       .join('line')
       .attr('class', 'graph-link')
-      .attr('marker-end', `url(#${markerIdRef.current})`)
+      .attr('marker-end', zoomLevel >= 0.6 && renderMode === 'svg' ? `url(#${markerIdRef.current})` : null)
       .attr('stroke-linecap', 'round')
       .attr('stroke-width', (datum) => clamp(datum.weight ?? 1, 1, 4))
       .attr('stroke-opacity', 0.25)
@@ -1061,6 +1155,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       )
 
       simulationNodesRef.current = simulationNodes
+      drawCanvas(simulationNodes, simulationLinks)
     })
 
     simulationRef.current = simulation
@@ -1180,6 +1275,8 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
         )
 
         labelSelection.attr('display', nextZoom > 1.5 ? null : 'none')
+        linkSelection.attr('marker-end', nextZoom >= 0.6 && renderMode === 'svg' ? `url(#${markerIdRef.current})` : null)
+        drawCanvas(simulationNodes, simulationLinks)
       })
 
     zoomBehaviorRef.current = zoomBehavior
@@ -1225,6 +1322,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     })
 
     applyInteractionStyles()
+    drawCanvas(simulationNodes, simulationLinks)
 
     return () => {
       simulation.stop()
@@ -1246,6 +1344,9 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     overlayMode,
     ageExtent,
     testablePaths,
+    drawCanvas,
+    zoomLevel,
+    renderMode,
     viewport.height,
     viewport.width,
   ])
@@ -1339,6 +1440,10 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
   return (
     <section className="graph-canvas" aria-label="Dependency graph canvas">
       <div className="graph-canvas-viewport" ref={containerRef}>
+        <canvas
+          ref={canvasRef}
+          className={`graph-canvas-layer ${renderMode === 'canvas' ? 'is-visible' : 'is-hidden'}`}
+        />
         <svg ref={svgRef} className="graph-canvas-svg" />
 
         <div className="graph-canvas-hud">

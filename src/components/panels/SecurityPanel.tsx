@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { getSeverityStats } from '@/lib/analysis/securityScanner'
 import { useAppStore } from '@/store/useAppStore'
 import { downloadTextFile, exportSecurityMarkdown } from '@/utils/exportUtils'
@@ -191,7 +191,7 @@ function AlertCard({ alert, expanded, onToggleExpanded, onJumpToFile }: AlertCar
   )
 }
 
-export function SecurityPanel({ findings }: SecurityPanelProps) {
+function SecurityPanelComponent({ findings }: SecurityPanelProps) {
   const analysisResult = useAppStore((state) => state.analysisResult)
   const selectNode = useAppStore((state) => state.selectNode)
 
@@ -487,3 +487,5 @@ export function SecurityPanel({ findings }: SecurityPanelProps) {
     </section>
   )
 }
+
+export const SecurityPanel = memo(SecurityPanelComponent)

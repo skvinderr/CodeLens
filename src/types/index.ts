@@ -21,6 +21,8 @@ export interface FileNode {
   exports: string[]
   lastModified?: Date
   lineCount?: number
+  contentUnavailable?: boolean
+  warning?: string
 }
 
 export interface GraphNode extends FileNode {
@@ -184,6 +186,7 @@ export interface AnalysisResult {
   circularDeps: string[][]
   techStack: TechStack
   analyzedAt: Date
+  skippedFiles?: string[]
 }
 
 export type AppMode = 'idle' | 'loading' | 'ready' | 'error'
@@ -193,6 +196,11 @@ export interface AnalysisStage {
   label: string
   status: 'pending' | 'running' | 'done' | 'error'
   progress?: number
+  detail?: string
+  current?: number
+  total?: number
+  currentFile?: string
+  startedAt?: number
 }
 
 export type RepositorySource = 'github' | 'local'

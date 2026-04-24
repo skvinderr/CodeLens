@@ -52,6 +52,35 @@ body {
   flex-direction: column;
 }
 
+.navbar-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.rate-limit-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 1rem;
+  font: 600 0.74rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.rate-limit-banner.is-warning {
+  background: rgba(240, 170, 51, 0.18);
+  color: #9a5c03;
+}
+
+.rate-limit-banner.is-critical {
+  background: rgba(217, 75, 75, 0.18);
+  color: #a82424;
+}
+
+.rate-limit-link {
+  color: inherit;
+  font-weight: 700;
+}
+
 .navbar {
   display: flex;
   align-items: center;
@@ -140,6 +169,26 @@ body {
   display: block;
   touch-action: none;
   background: transparent;
+}
+
+.graph-canvas-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.graph-canvas-layer.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.graph-canvas-layer.is-visible + .graph-canvas-svg {
+  opacity: 1;
+}
+
+.graph-stage-shell {
+  position: relative;
 }
 
 .graph-canvas-hud {
@@ -1443,20 +1492,144 @@ body {
 }
 
 .progress-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(6, 17, 29, 0.48);
+  background: rgba(6, 17, 29, 0.68);
+  z-index: 20;
 }
 
 .progress-panel {
-  width: min(380px, 92vw);
+  width: min(720px, calc(100% - 2rem));
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.24);
   background: rgba(10, 18, 30, 0.92);
   color: #e8f5ff;
   padding: 1rem;
+}
+
+.progress-header {
+  display: flex;
+  gap: 0.8rem;
+  margin-bottom: 0.9rem;
+}
+
+.progress-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.progress-repo-meta {
+  min-width: 0;
+}
+
+.progress-repo-name {
+  margin: 0;
+  font: 700 1.15rem/1.1 'Space Grotesk', system-ui, sans-serif;
+}
+
+.progress-repo-description {
+  margin: 0.25rem 0 0.45rem;
+  color: #9eb2c6;
+  font: 500 0.84rem/1.3 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+.progress-repo-badges {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.progress-repo-pill {
+  border: 1px solid rgba(133, 166, 197, 0.35);
+  border-radius: 999px;
+  padding: 0.18rem 0.45rem;
+  font: 600 0.66rem/1 'IBM Plex Mono', ui-monospace, monospace;
+  color: #dff2ff;
+}
+
+.progress-stage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.progress-stage-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: start;
+}
+
+.progress-stage-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  margin-top: 0.22rem;
+  background: #70859b;
+}
+
+.progress-stage-icon.progress-running {
+  border: 2px solid rgba(29, 194, 221, 0.35);
+  border-top-color: #1dc2dd;
+  background: transparent;
+  animation: cl-spin 0.9s linear infinite;
+}
+
+.progress-stage-icon.progress-done {
+  background: #1dc77e;
+}
+
+.progress-stage-icon.progress-error {
+  background: #ff6a6a;
+}
+
+@keyframes cl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.progress-stage-label {
+  font: 600 0.8rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.progress-stage-detail,
+.progress-stage-meta,
+.progress-stage-filename {
+  color: #9eb2c6;
+  font: 500 0.72rem/1.2 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+.progress-stage-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-actions {
+  display: flex;
+  gap: 0.45rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.progress-view-results {
+  animation: progress-slide-up 260ms ease;
+}
+
+@keyframes progress-slide-up {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .progress-track {
