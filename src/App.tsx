@@ -182,6 +182,12 @@ function App() {
     }
   }, [mode])
 
+  useEffect(() => {
+    if (mode !== 'loading') {
+      setIsOverlayVisible(false)
+    }
+  }, [mode])
+
   const statusMessage = useMemo(() => {
     if (error) {
       return error
@@ -208,6 +214,11 @@ function App() {
   const handleSubmitAnalysis = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     void runAnalysis(repoInput)
+  }
+
+  const handleCancelAnalysis = () => {
+    abortActiveRequests()
+    setIsOverlayVisible(false)
   }
 
   return (
@@ -273,7 +284,7 @@ function App() {
               </Button>
               <Button
                 variant="ghost"
-                onClick={abortActiveRequests}
+                onClick={handleCancelAnalysis}
                 disabled={mode !== 'loading'}
               >
                 Cancel
@@ -357,7 +368,7 @@ function App() {
         isVisible={isOverlayVisible}
         repo={analysisResult?.repo ?? null}
         stages={stages}
-        onCancel={abortActiveRequests}
+        onCancel={handleCancelAnalysis}
         onSkipContributors={skipContributors}
         onViewResults={() => setIsOverlayVisible(false)}
       />

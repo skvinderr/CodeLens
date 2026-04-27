@@ -41,6 +41,7 @@ export function useAnalysis(): UseAnalysisResult {
   const workerRef = useRef<RemoteWorker | null>(null)
   const workerInstanceRef = useRef<Worker | null>(null)
   const skipContributorsRef = useRef(false)
+  const runTokenRef = useRef(0)
 
   const findings = analysisResult?.security ?? []
   const health = analysisResult?.health ?? null
@@ -102,20 +103,29 @@ export function useAnalysis(): UseAnalysisResult {
       setWarning(null)
       skipContributorsRef.current = false
       setStages(createDefaultStages())
+      const runToken = runTokenRef.current + 1
+      runTokenRef.current = runToken
 
       try {
         const abortController = beginRequestBatch()
+        const isRunStale = () =>
+          abortController.signal.aborted || runTokenRef.current !== runToken
+
         const fetcher = new GitHubFetcher(token || undefined, abortController.signal)
-        const repoUrl = /^https?:\/\//i.test(rawRepo) || rawRepo.includes('github.com/')
-          ? rawRepo
-          : `https://github.com/${rawRepo.replace(/^\/+|\/+$/g, '')}`
+        const repoUrl = normalizeRepositoryInput(rawRepo)
 
         updateStage('repo', { status: 'running', startedAt: Date.now() })
         const repo = await fetcher.parseRepoUrl(repoUrl)
+        if (isRunStale()) {
+          return
+        }
         updateStage('repo', { status: 'done' })
 
         updateStage('tree', { status: 'running', startedAt: Date.now() })
         const tree = await fetcher.getFileTree(repo)
+        if (isRunStale()) {
+          return
+        }
         updateStage('tree', { status: 'done', current: tree.length, total: tree.length })
         if (fetcher.wasTreeTrimmed()) {
           handleGitHubError(
@@ -134,6 +144,7 @@ export function useAnalysis(): UseAnalysisResult {
           fetcher,
           repo,
           tree.map((entry) => entry.path),
+          abortController.signal,
           (current, total, filename) => {
             updateStage('read-contents', {
               status: 'running',
@@ -145,6 +156,9 @@ export function useAnalysis(): UseAnalysisResult {
             })
           },
         )
+        if (isRunStale()) {
+          return
+        }
         updateStage('read-contents', { status: 'done', progress: 100 })
 
         const worker = workerRef.current
@@ -153,8 +167,14 @@ export function useAnalysis(): UseAnalysisResult {
         }
 
         const files = await worker.parseFiles(fileInputs)
+        if (isRunStale()) {
+          return
+        }
         updateStage('graph', { status: 'running', startedAt: Date.now() })
         const graph = await worker.buildDependencyGraph(files)
+        if (isRunStale()) {
+          return
+        }
         updateStage('graph', { status: 'done' })
         hydrateBlastScores(graph)
 
@@ -163,6 +183,7 @@ export function useAnalysis(): UseAnalysisResult {
           fetcher,
           repo,
           files,
+          abortController.signal,
           () => skipContributorsRef.current,
           (current, total, filename) => {
             updateStage('contributors', {
@@ -174,6 +195,9 @@ export function useAnalysis(): UseAnalysisResult {
             })
           },
         )
+        if (isRunStale()) {
+          return
+        }
         updateStage('contributors', {
           status: skipContributorsRef.current ? 'error' : 'done',
           detail: skipContributorsRef.current ? 'Contributor fetch skipped' : undefined,
@@ -216,11 +240,17 @@ export function useAnalysis(): UseAnalysisResult {
           ...baseResult,
           health: await worker.computeHealthScore(baseResult),
         }
+        if (isRunStale()) {
+          return
+        }
 
         updateStage('security', { status: 'done' })
         updateStage('health', { status: 'done' })
         setAnalysisResult(result)
       } catch (error) {
+        if (isAbortError(error)) {
+          return
+        }
         handleGitHubError(error)
       }
     },
@@ -270,19 +300,26 @@ async function loadFileInputs(
   fetcher: GitHubFetcher,
   repo: RepoInfo,
   paths: string[],
+  signal: AbortSignal,
   onProgress: (current: number, total: number, fileName: string) => void,
 ): Promise<WorkerFileInput[]> {
   const filesPerSecondTracker = { startedAt: performance.now() }
   const files: WorkerFileInput[] = []
 
   for (const [index, path] of paths.entries()) {
+    throwIfAborted(signal)
+
     let content = ''
     let contentUnavailable = false
     let warning: string | undefined
 
     try {
       content = (await fetcher.getFileContent(repo, path)) ?? ''
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error
+      }
+
       contentUnavailable = true
       warning = 'Content unavailable'
     }
@@ -312,6 +349,7 @@ async function loadContributors(
   fetcher: GitHubFetcher,
   repo: RepoInfo,
   files: FileNode[],
+  signal: AbortSignal,
   shouldSkip: () => boolean,
   onProgress: (current: number, total: number, fileName: string) => void,
 ): Promise<Map<string, FileContributors>> {
@@ -319,6 +357,8 @@ async function loadContributors(
   const candidateFiles = files.filter((file) => !file.contentUnavailable).slice(0, 60)
 
   for (const [index, file] of candidateFiles.entries()) {
+    throwIfAborted(signal)
+
     if (shouldSkip()) {
       break
     }
@@ -331,12 +371,60 @@ async function loadContributors(
         contributors: fileContributors,
         totalCommits: fileContributors.reduce((sum, contributor) => sum + contributor.commits, 0),
       })
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error
+      }
+
       continue
     }
   }
 
   return contributors
+}
+
+function normalizeRepositoryInput(input: string): string {
+  const trimmed = input.trim().replace(/^git\+/, '')
+
+  if (/^git@github\.com:/i.test(trimmed)) {
+    const repoPath = trimmed.replace(/^git@github\.com:/i, '')
+    return `https://github.com/${repoPath.replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '')}`
+  }
+
+  if (/^ssh:\/\/git@github\.com\//i.test(trimmed)) {
+    const repoPath = trimmed.replace(/^ssh:\/\/git@github\.com\//i, '')
+    return `https://github.com/${repoPath.replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '')}`
+  }
+
+  if (/^git:\/\/github\.com\//i.test(trimmed)) {
+    const repoPath = trimmed.replace(/^git:\/\/github\.com\//i, '')
+    return `https://github.com/${repoPath.replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '')}`
+  }
+
+  if (/^https?:\/\//i.test(trimmed) || trimmed.includes('github.com/')) {
+    return trimmed
+  }
+
+  return `https://github.com/${trimmed.replace(/^\/+|\/+$/g, '')}`
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw new DOMException('Request aborted', 'AbortError')
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === 'AbortError'
+  }
+
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    String((error as { name?: string }).name) === 'AbortError'
+  )
 }
 
 function createDefaultStages(): AnalysisStage[] {

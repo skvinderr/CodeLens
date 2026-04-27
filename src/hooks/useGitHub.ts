@@ -42,7 +42,9 @@ export function useGitHub(): UseGitHubResult {
       if (error instanceof GitHubError) {
         switch (error.code) {
           case 'NOT_FOUND':
-            setError('Repository not found. Check the URL and make sure it is public.')
+            setError(
+              'Repository not found or inaccessible. Check owner/repo spelling; for private repos use a token with repo read access.',
+            )
             return
           case 'RATE_LIMITED':
             setError(
@@ -61,7 +63,9 @@ export function useGitHub(): UseGitHubResult {
             setWarning('Repository has too many files. Showing the largest 500 files.')
             return
           case 'INVALID_URL':
-            setError('Not a valid GitHub URL. Try: github.com/owner/repository')
+            setError(
+              'Invalid repository input. Use owner/repo, github.com/owner/repo, https://github.com/owner/repo, or git@github.com:owner/repo.git',
+            )
             return
         }
       }
