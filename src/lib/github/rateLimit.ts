@@ -39,6 +39,17 @@ function notifySubscribers(): void {
   }
 }
 
+function isSameRateLimitState(
+  left: RateLimitState,
+  right: RateLimitState,
+): boolean {
+  return (
+    left.remaining === right.remaining &&
+    left.limit === right.limit &&
+    left.resetAt === right.resetAt
+  )
+}
+
 export function parseRateLimit(headers: RateLimitHeaders): RateLimitState {
   return {
     limit: toNumber(headers['x-ratelimit-limit'] ?? headers['X-RateLimit-Limit']),
@@ -51,11 +62,17 @@ export function parseRateLimit(headers: RateLimitHeaders): RateLimitState {
 
 function applyRateLimitHeaders(headers: RateLimitHeaders): void {
   const parsed = parseRateLimit(headers)
-  rateLimitStatus = {
+  const next: RateLimitState = {
     remaining: parsed.remaining,
     limit: parsed.limit,
     resetAt: parsed.resetAt,
   }
+
+  if (isSameRateLimitState(rateLimitStatus, next)) {
+    return
+  }
+
+  rateLimitStatus = next
   notifySubscribers()
 }
 
@@ -88,7 +105,7 @@ export function registerRateLimitHooks(octokit: Octokit): void {
 }
 
 export function getRateLimitStatus(): RateLimitState {
-  return { ...rateLimitStatus }
+  return rateLimitStatus
 }
 
 function subscribe(listener: () => void): () => void {

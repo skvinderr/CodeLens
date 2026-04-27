@@ -76,6 +76,9 @@ const DEFAULT_GRAPH_FILTER: GraphFilter = {
   showOrphans: true,
 }
 
+const EMPTY_VISIBLE_NODES: GraphNode[] = []
+const EMPTY_VISIBLE_LINKS: GraphLink[] = []
+
 let visibleNodesCache: {
   result: GraphNode[]
   analysisResult: AnalysisResult | null
@@ -310,7 +313,7 @@ export const useAppStore = create<AppStore>()(
         const { analysisResult, graphFilter } = get()
 
         if (!analysisResult) {
-          return []
+          return EMPTY_VISIBLE_NODES
         }
 
         if (
@@ -346,7 +349,7 @@ export const useAppStore = create<AppStore>()(
         const links = getLinksFromResult(state.analysisResult)
 
         if (visibleNodeIds.size === 0 || links.length === 0) {
-          return []
+          return EMPTY_VISIBLE_LINKS
         }
 
         if (
