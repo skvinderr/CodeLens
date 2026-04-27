@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as d3 from 'd3'
 import {
   GraphControls,
+  type GraphViewMode,
   type OwnershipLegendItem,
 } from '@/components/graph/GraphControls'
 import { MiniMap } from '@/components/graph/MiniMap'
@@ -9,8 +10,7 @@ import { NodeTooltip } from '@/components/graph/NodeTooltip'
 import { calculateBlastRadius } from '@/lib/graph/blastRadius'
 import { useAppStore } from '@/store/useAppStore'
 import { contributorColorFromLogin, normalizePathKey } from '@/utils/ownershipUtils'
-import { runLayoutEngine } from '@/lib/graph/layoutEngine'
-import { darkenHex, languageToColor, withAlpha, withSaturation } from '@/utils/colorUtils'
+import { darkenHex, languageToColor, withSaturation } from '@/utils/colorUtils'
 import type { FileContributors, GraphEdge, GraphNode } from '@/types'
 
 export interface GraphCanvasProps {
@@ -80,6 +80,12 @@ function defaultNodeRadius(node: GraphNode): number {
   return Math.max(6, Math.min(20, Math.log((node.size ?? 0) + 1) * 3))
 }
 
+function heatmapNodeRadius(node: GraphNode): number {
+  const loc =
+    node.lineCount ?? Math.max(1, Math.round(Math.max(1, node.size ?? 0) / 42))
+  return clamp(Math.sqrt(loc) * 1.35, 6, 24)
+}
+
 function normalizeBlastScore(score: number): number {
   if (!Number.isFinite(score)) {
     return 0
@@ -117,116 +123,28 @@ function colorForBlastDistance(distance: number): string {
   return '#F9ECAA'
 }
 
-function nodeColorByOverlay(
-  node: GraphNode,
-  overlay: ReturnType<typeof useAppStore.getState>['graphOverlay'],
-  context: {
-    ageExtent: [number, number]
-    ownershipColorByContributor: Map<string, string>
-    topContributorByNodeId: Map<string, string>
-    testablePaths: Set<string>
-  },
-): string {
-  if (overlay === 'blast') {
+function nodeRadiusByMode(node: GraphNode, mode: GraphViewMode): number {
+  return mode === 'heatmap' ? heatmapNodeRadius(node) : defaultNodeRadius(node)
+}
+
+function nodeColorByMode(node: GraphNode, mode: GraphViewMode): string {
+  if (mode === 'heatmap') {
     return d3.interpolateTurbo(normalizeBlastScore(node.blastScore))
   }
 
-  if (overlay === 'size') {
-    const size = Math.max(0, node.size ?? 0)
-    const scale = d3.scaleLinear<string>().domain([0, 2000]).range(['#94a3b8', '#ef4444']).clamp(true)
-    return scale(size)
-  }
-
-  if (overlay === 'age') {
-    const [minAge, maxAge] = context.ageExtent
-    const current = new Date(node.lastModified ?? 0).getTime()
-    if (!Number.isFinite(current) || minAge === maxAge) {
-      return '#94a3b8'
-    }
-
-    const ageScale = d3
-      .scaleLinear<string>()
-      .domain([minAge, maxAge])
-      .range(['#94a3b8', '#f8fafc'])
-      .clamp(true)
-    return ageScale(current)
-  }
-
-  if (overlay === 'tests') {
-    const hasTest = hasTestCoverage(node, context.testablePaths)
-    const large = (node.lineCount ?? 0) > 250 || (node.size ?? 0) > 12000
-    if (hasTest) {
-      return '#1FA46E'
-    }
-    if (large) {
-      return '#E24B4A'
-    }
-    return '#EF9F27'
-  }
-
-  if (overlay === 'ownership') {
-    const owner = context.topContributorByNodeId.get(node.id)
-    if (!owner) {
-      return '#90a3b8'
-    }
-
-    return context.ownershipColorByContributor.get(owner) ?? contributorColorFromLogin(owner)
-  }
-
   return languageToColor(node.language || node.extension)
-}
-
-function hasTestCoverage(node: GraphNode, testablePaths: Set<string>): boolean {
-  const normalizedPath = getNodePath(node).replace(/\\/g, '/')
-  const base = normalizedPath.replace(/\.[^.]+$/, '')
-  const fileName = normalizedPath.split('/').pop() ?? normalizedPath
-  const fileBase = fileName.replace(/\.[^.]+$/, '')
-
-  return [...testablePaths].some((candidate) => {
-    return (
-      candidate.includes(`${base}.test.`) ||
-      candidate.includes(`${base}.spec.`) ||
-      candidate.includes(`/${fileBase}.test.`) ||
-      candidate.includes(`/${fileBase}.spec.`) ||
-      candidate.includes(`/__tests__/${fileName}`) ||
-      candidate.includes(`/tests/${fileName}`)
-    )
-  })
-}
-
-function clusterHullPath(nodes: SimulationNode[]): string | null {
-  const points = nodes
-    .filter((node) => Number.isFinite(node.x) && Number.isFinite(node.y))
-    .map((node) => [node.x ?? 0, node.y ?? 0] as [number, number])
-
-  if (points.length < 3) {
-    return null
-  }
-
-  const hull = d3.polygonHull(points)
-  if (!hull) {
-    return null
-  }
-
-  return `M${hull.map(([x, y]) => `${x},${y}`).join('L')}Z`
 }
 
 export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
   const selectNode = useAppStore((state) => state.selectNode)
   const selectedNodeId = useAppStore((state) => state.selectedNodeId)
   const repo = useAppStore((state) => state.analysisResult?.repo ?? null)
-  const analysisFiles = useAppStore((state) => state.analysisResult?.files ?? [])
   const contributorsByFile = useAppStore(
     (state) => state.analysisResult?.contributors ?? null,
   )
-  const layoutMode = useAppStore((state) => state.graphLayout)
-  const overlayMode = useAppStore((state) => state.graphOverlay)
-  const setLayoutMode = useAppStore((state) => state.setGraphLayout)
-  const setOverlayMode = useAppStore((state) => state.setGraphOverlay)
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   const simulationRef = useRef<d3.Simulation<SimulationNode, undefined> | null>(null)
   const simulationNodesRef = useRef<GraphNode[]>([])
@@ -252,6 +170,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
 
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [zoomLevel, setZoomLevel] = useState(1)
+  const [viewMode, setViewMode] = useState<GraphViewMode>('force')
   const [showOrphans, setShowOrphans] = useState(true)
   const [hiddenLanguages, setHiddenLanguages] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -297,7 +216,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       ),
     [edges, filteredNodeIds],
   )
-  const renderMode = filteredNodes.length > 200 ? 'canvas' : 'svg'
 
   const contributorsByPath = useMemo(() => {
     if (!contributorsByFile || contributorsByFile.size === 0) {
@@ -362,19 +280,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
         color: ownershipColorByContributor.get(login) ?? contributorColorFromLogin(login),
       }))
   }, [ownershipColorByContributor, topContributorByNodeId])
-
-  const testablePaths = useMemo(
-    () => new Set(analysisFiles.map((file) => file.path.replace(/\\/g, '/').toLowerCase())),
-    [analysisFiles],
-  )
-
-  const ageExtent = useMemo<[number, number]>(() => {
-    const values = filteredNodes
-      .map((node) => new Date(node.lastModified ?? 0).getTime())
-      .filter(Number.isFinite)
-
-    return [d3.min(values) ?? 0, d3.max(values) ?? 0]
-  }, [filteredNodes])
 
   const normalizedSearch = searchQuery.trim().toLowerCase()
   const matchingNodeIds = useMemo(() => {
@@ -456,15 +361,22 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     const hasBlastSelection = Boolean(selectedNodeId && blastResult)
 
     const baseNodeColor = (nodeDatum: SimulationNode): string => {
-      return nodeColorByOverlay(nodeDatum, overlayMode, {
-        ageExtent,
-        ownershipColorByContributor,
-        topContributorByNodeId,
-        testablePaths,
-      })
+      if (viewMode === 'ownership') {
+        const owner = topContributorByNodeId.get(nodeDatum.id)
+        if (!owner) {
+          return '#90a3b8'
+        }
+
+        return (
+          ownershipColorByContributor.get(owner) ?? contributorColorFromLogin(owner)
+        )
+      }
+
+      return nodeColorByMode(nodeDatum, viewMode)
     }
 
-    const baseNodeRadius = (nodeDatum: SimulationNode): number => defaultNodeRadius(nodeDatum)
+    const baseNodeRadius = (nodeDatum: SimulationNode): number =>
+      nodeRadiusByMode(nodeDatum, viewMode)
 
     const baseLinkColor = (linkDatum: SimulationLink): string => {
       const source =
@@ -686,9 +598,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     relevantEdgeIds,
     selectedNodeId,
     topContributorByNodeId,
-    overlayMode,
-    ageExtent,
-    testablePaths,
+    viewMode,
   ])
 
   const applyZoomTransform = useCallback(
@@ -727,98 +637,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       applyZoomTransform(nextTransform, 0)
     },
     [applyZoomTransform, viewport.height, viewport.width],
-  )
-
-  const drawCanvas = useCallback(
-    (simulationNodes: SimulationNode[], simulationLinks: SimulationLink[]) => {
-      const canvas = canvasRef.current
-      if (!canvas || renderMode !== 'canvas') {
-        return
-      }
-
-      const context = canvas.getContext('2d')
-      if (!context) {
-        return
-      }
-
-      const ratio = window.devicePixelRatio || 1
-      if (canvas.width !== Math.floor(viewport.width * ratio)) {
-        canvas.width = Math.floor(viewport.width * ratio)
-        canvas.height = Math.floor(viewport.height * ratio)
-        canvas.style.width = `${viewport.width}px`
-        canvas.style.height = `${viewport.height}px`
-      }
-
-      context.setTransform(ratio, 0, 0, ratio, 0, 0)
-      context.clearRect(0, 0, viewport.width, viewport.height)
-      context.save()
-      const transform = zoomTransformRef.current
-      context.translate(transform.x, transform.y)
-      context.scale(transform.k, transform.k)
-
-      context.lineCap = 'round'
-      context.globalAlpha = 0.45
-      for (const link of simulationLinks) {
-        const source = typeof link.source === 'string' ? nodeMapRef.current.get(link.source) : link.source
-        const target = typeof link.target === 'string' ? nodeMapRef.current.get(link.target) : link.target
-        if (!source || !target) {
-          continue
-        }
-        context.beginPath()
-        context.strokeStyle = '#6e8196'
-        context.lineWidth = clamp(link.weight ?? 1, 1, 3)
-        context.moveTo(source.x ?? 0, source.y ?? 0)
-        context.lineTo(target.x ?? 0, target.y ?? 0)
-        context.stroke()
-      }
-
-      context.globalAlpha = 1
-      for (const node of simulationNodes) {
-        const color = node.contentUnavailable
-          ? '#7b8794'
-          : nodeColorByOverlay(node, overlayMode, {
-              ageExtent,
-              ownershipColorByContributor,
-              topContributorByNodeId,
-              testablePaths,
-            })
-        const radius = defaultNodeRadius(node)
-        context.beginPath()
-        if (node.contentUnavailable) {
-          context.setLineDash([4, 3])
-        } else {
-          context.setLineDash([])
-        }
-        context.fillStyle = color
-        context.strokeStyle = darkenHex(color, 0.24)
-        context.lineWidth = selectedNodeId === node.id ? 4 : 2
-        context.arc(node.x ?? 0, node.y ?? 0, radius, 0, Math.PI * 2)
-        context.fill()
-        context.stroke()
-        context.setLineDash([])
-
-        if (zoomLevel >= 1.5) {
-          context.fillStyle = '#9eb2c6'
-          context.font = "10px 'IBM Plex Mono'"
-          context.textAlign = 'center'
-          context.fillText(getNodeFilename(node), node.x ?? 0, (node.y ?? 0) + radius + 14)
-        }
-      }
-
-      context.restore()
-    },
-    [
-      ageExtent,
-      overlayMode,
-      ownershipColorByContributor,
-      renderMode,
-      selectedNodeId,
-      testablePaths,
-      topContributorByNodeId,
-      viewport.height,
-      viewport.width,
-      zoomLevel,
-    ],
   )
 
   const handleZoomDelta = useCallback(
@@ -875,11 +693,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
   }, [applyZoomTransform, viewport.height, viewport.width])
 
   const handleResetLayout = useCallback(() => {
-    if (layoutMode !== 'force') {
-      setLayoutMode(layoutMode)
-      return
-    }
-
     const simulation = simulationRef.current
     const simulationNodes = simulationNodesRef.current as SimulationNode[]
     if (!simulation || viewport.width <= 0 || viewport.height <= 0) {
@@ -896,7 +709,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     }
 
     simulation.alpha(1).restart()
-  }, [layoutMode, setLayoutMode, viewport.height, viewport.width])
+  }, [viewport.height, viewport.width])
 
   const handlePinAll = useCallback(() => {
     for (const node of simulationNodesRef.current as SimulationNode[]) {
@@ -978,7 +791,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       .attr('fill', 'rgba(124, 142, 159, 0.9)')
 
     const zoomLayer = svg.append('g').attr('class', 'graph-zoom-layer')
-    const clusterLayer = zoomLayer.append('g').attr('class', 'graph-cluster-layer')
     const linkLayer = zoomLayer.append('g').attr('class', 'graph-link-layer')
     const nodeLayer = zoomLayer.append('g').attr('class', 'graph-node-layer')
     const labelLayer = zoomLayer.append('g').attr('class', 'graph-label-layer')
@@ -1014,7 +826,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       })
       .join('line')
       .attr('class', 'graph-link')
-      .attr('marker-end', zoomLevel >= 0.6 && renderMode === 'svg' ? `url(#${markerIdRef.current})` : null)
+      .attr('marker-end', `url(#${markerIdRef.current})`)
       .attr('stroke-linecap', 'round')
       .attr('stroke-width', (datum) => clamp(datum.weight ?? 1, 1, 4))
       .attr('stroke-opacity', 0.25)
@@ -1041,8 +853,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
           nodeId: nodeDatum.id,
         })
       })
-      .attr('cx', (datum) => datum.x ?? 0)
-      .attr('cy', (datum) => datum.y ?? 0)
 
     const labelSelection = labelLayer
       .selectAll<SVGTextElement, SimulationNode>('text')
@@ -1056,8 +866,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       .style('pointer-events', 'none')
       .text((datum) => truncateLabel(getNodeFilename(datum), 18))
       .attr('display', 'none')
-      .attr('x', (datum) => datum.x ?? 0)
-      .attr('y', (datum) => (datum.y ?? 0) + defaultNodeRadius(datum) + 4)
 
     const dragBehavior = d3
       .drag<SVGCircleElement, SimulationNode>()
@@ -1087,15 +895,23 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     linkSelectionRef.current = linkSelection
     labelSelectionRef.current = labelSelection
 
-    const colorForNode = (nodeDatum: SimulationNode): string =>
-      nodeColorByOverlay(nodeDatum, overlayMode, {
-        ageExtent,
-        ownershipColorByContributor,
-        topContributorByNodeId,
-        testablePaths,
-      })
+    const colorForNode = (nodeDatum: SimulationNode): string => {
+      if (viewMode === 'ownership') {
+        const owner = topContributorByNodeId.get(nodeDatum.id)
+        if (!owner) {
+          return '#90a3b8'
+        }
 
-    const radiusForNode = (nodeDatum: SimulationNode): number => defaultNodeRadius(nodeDatum)
+        return (
+          ownershipColorByContributor.get(owner) ?? contributorColorFromLogin(owner)
+        )
+      }
+
+      return nodeColorByMode(nodeDatum, viewMode)
+    }
+
+    const radiusForNode = (nodeDatum: SimulationNode): number =>
+      nodeRadiusByMode(nodeDatum, viewMode)
 
     nodeSelection
       .attr('r', (nodeDatum) => radiusForNode(nodeDatum))
@@ -1133,6 +949,106 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       )
       .alphaDecay(0.028)
 
+    if (viewMode === 'radial') {
+      simulation
+        .force(
+          'radial',
+          d3
+            .forceRadial<SimulationNode>(
+              Math.min(viewport.width, viewport.height) * 0.34,
+              viewport.width / 2,
+              viewport.height / 2,
+            )
+            .strength(0.18),
+        )
+        .force('x', null)
+        .force('y', null)
+    } else if (viewMode === 'hierarchical') {
+      const adjacency = new Map<string, string[]>()
+      for (const nodeDatum of simulationNodes) {
+        adjacency.set(nodeDatum.id, [])
+      }
+      for (const linkDatum of simulationLinks) {
+        const source = sourceNodeId(linkDatum)
+        const target = targetNodeId(linkDatum)
+        adjacency.get(source)?.push(target)
+      }
+
+      const root =
+        simulationNodes.reduce((current, nodeDatum) =>
+          nodeDatum.degree > current.degree ? nodeDatum : current,
+        ) ?? simulationNodes[0]
+
+      const levelMap = new Map<string, number>()
+      const queue: string[] = root ? [root.id] : []
+      if (root) {
+        levelMap.set(root.id, 0)
+      }
+
+      while (queue.length > 0) {
+        const currentId = queue.shift()
+        if (!currentId) {
+          continue
+        }
+
+        const currentLevel = levelMap.get(currentId) ?? 0
+        for (const nextId of adjacency.get(currentId) ?? []) {
+          if (!levelMap.has(nextId)) {
+            levelMap.set(nextId, currentLevel + 1)
+            queue.push(nextId)
+          }
+        }
+      }
+
+      let fallbackLevel = d3.max([...levelMap.values()]) ?? 0
+      for (const nodeDatum of simulationNodes) {
+        if (!levelMap.has(nodeDatum.id)) {
+          fallbackLevel += 1
+          levelMap.set(nodeDatum.id, fallbackLevel)
+        }
+      }
+
+      const levels = new Map<number, SimulationNode[]>()
+      for (const nodeDatum of simulationNodes) {
+        const level = levelMap.get(nodeDatum.id) ?? 0
+        if (!levels.has(level)) {
+          levels.set(level, [])
+        }
+        levels.get(level)?.push(nodeDatum)
+      }
+
+      const maxLevel = d3.max([...levels.keys()]) ?? 0
+      const levelSpacing = maxLevel === 0 ? 0 : viewport.width / (maxLevel + 1)
+
+      const targetById = new Map<string, { x: number; y: number }>()
+      for (const [level, levelNodes] of levels.entries()) {
+        const rowSpacing = viewport.height / (levelNodes.length + 1)
+        levelNodes.forEach((nodeDatum, index) => {
+          targetById.set(nodeDatum.id, {
+            x: Math.max(36, 28 + level * levelSpacing),
+            y: (index + 1) * rowSpacing,
+          })
+        })
+      }
+
+      simulation
+        .force(
+          'x',
+          d3
+            .forceX<SimulationNode>((nodeDatum) => targetById.get(nodeDatum.id)?.x ?? viewport.width / 2)
+            .strength(0.7),
+        )
+        .force(
+          'y',
+          d3
+            .forceY<SimulationNode>((nodeDatum) => targetById.get(nodeDatum.id)?.y ?? viewport.height / 2)
+            .strength(0.55),
+        )
+        .force('radial', null)
+    } else {
+      simulation.force('radial', null).force('x', null).force('y', null)
+    }
+
     simulation.on('tick', () => {
       linkSelection
         .attr('x1', (datum) => (typeof datum.source === 'string' ? 0 : (datum.source.x ?? 0)))
@@ -1155,112 +1071,9 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       )
 
       simulationNodesRef.current = simulationNodes
-      drawCanvas(simulationNodes, simulationLinks)
     })
 
     simulationRef.current = simulation
-
-    const laidOutGraph = runLayoutEngine(
-      {
-        nodes: simulationNodes,
-        links: simulationLinks.map((link) => ({
-          source: sourceNodeId(link),
-          target: targetNodeId(link),
-          type: link.type,
-          weight: link.weight,
-        })),
-        edges: simulationLinks.map((link) => ({
-          source: sourceNodeId(link),
-          target: targetNodeId(link),
-          type: link.type,
-          weight: link.weight,
-        })),
-      },
-      {
-        width: viewport.width,
-        height: viewport.height,
-        mode: layoutMode,
-      },
-    )
-
-    const targetById = new Map(laidOutGraph.nodes.map((node) => [node.id, node]))
-    if (layoutMode !== 'force') {
-      simulation.stop()
-      simulationNodes.forEach((node) => {
-        const target = targetById.get(node.id)
-        node.x = target?.x ?? node.x
-        node.y = target?.y ?? node.y
-      })
-
-      nodeSelection
-        .transition()
-        .duration(600)
-        .ease(d3.easeCubicInOut)
-        .attr('cx', (datum) => datum.x ?? 0)
-        .attr('cy', (datum) => datum.y ?? 0)
-
-      labelSelection
-        .transition()
-        .duration(600)
-        .ease(d3.easeCubicInOut)
-        .attr('x', (datum) => datum.x ?? 0)
-        .attr('y', (datum) => (datum.y ?? 0) + radiusForNode(datum) + 4)
-
-      linkSelection
-        .transition()
-        .duration(600)
-        .ease(d3.easeCubicInOut)
-        .attr('x1', (datum) => (typeof datum.source === 'string' ? 0 : (datum.source.x ?? 0)))
-        .attr('y1', (datum) => (typeof datum.source === 'string' ? 0 : (datum.source.y ?? 0)))
-        .attr('x2', (datum) => (typeof datum.target === 'string' ? 0 : (datum.target.x ?? 0)))
-        .attr('y2', (datum) => (typeof datum.target === 'string' ? 0 : (datum.target.y ?? 0)))
-
-      if (layoutMode === 'cluster') {
-        const groups = d3.group(simulationNodes, (node) => node.group || 'root')
-        const hulls = [...groups.entries()]
-          .map(([group, groupNodes]) => ({
-            group,
-            path: clusterHullPath(groupNodes),
-            x: d3.mean(groupNodes, (node) => node.x ?? 0) ?? 0,
-            y: d3.mean(groupNodes, (node) => node.y ?? 0) ?? 0,
-          }))
-          .filter((entry) => entry.path)
-
-        clusterLayer
-          .selectAll<SVGPathElement, (typeof hulls)[number]>('path')
-          .data(hulls, (datum) => datum.group)
-          .join('path')
-          .attr('class', 'graph-cluster-hull')
-          .attr('fill', '#1dc2dd')
-          .attr('fill-opacity', 0.08)
-          .attr('stroke', withAlpha('#1dc2dd', 0.35))
-          .attr('stroke-width', 1.5)
-          .transition()
-          .duration(600)
-          .ease(d3.easeCubicInOut)
-          .attr('d', (datum) => datum.path ?? '')
-
-        clusterLayer
-          .selectAll<SVGTextElement, (typeof hulls)[number]>('text')
-          .data(hulls, (datum) => `label:${datum.group}`)
-          .join('text')
-          .attr('class', 'graph-cluster-label')
-          .attr('fill', 'var(--cl-muted)')
-          .attr('font-size', 12)
-          .attr('font-weight', 700)
-          .text((datum) => datum.group)
-          .transition()
-          .duration(600)
-          .ease(d3.easeCubicInOut)
-          .attr('x', (datum) => datum.x)
-          .attr('y', (datum) => datum.y)
-      } else {
-        clusterLayer.selectAll('*').remove()
-      }
-    } else {
-      clusterLayer.selectAll('*').remove()
-      simulation.alpha(1).restart()
-    }
 
     const zoomBehavior = d3
       .zoom<SVGSVGElement, unknown>()
@@ -1275,8 +1088,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
         )
 
         labelSelection.attr('display', nextZoom > 1.5 ? null : 'none')
-        linkSelection.attr('marker-end', nextZoom >= 0.6 && renderMode === 'svg' ? `url(#${markerIdRef.current})` : null)
-        drawCanvas(simulationNodes, simulationLinks)
       })
 
     zoomBehaviorRef.current = zoomBehavior
@@ -1322,7 +1133,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     })
 
     applyInteractionStyles()
-    drawCanvas(simulationNodes, simulationLinks)
 
     return () => {
       simulation.stop()
@@ -1340,13 +1150,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
     ownershipColorByContributor,
     selectNode,
     topContributorByNodeId,
-    layoutMode,
-    overlayMode,
-    ageExtent,
-    testablePaths,
-    drawCanvas,
-    zoomLevel,
-    renderMode,
+    viewMode,
     viewport.height,
     viewport.width,
   ])
@@ -1375,12 +1179,6 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
       window.removeEventListener('keydown', closeOnEscape)
     }
   }, [contextMenu])
-
-  useEffect(() => {
-    const fitGraph = () => handleFitAll()
-    window.addEventListener('codelens:fit-graph', fitGraph)
-    return () => window.removeEventListener('codelens:fit-graph', fitGraph)
-  }, [handleFitAll])
 
   const handleOpenOnGitHub = () => {
     if (!repo || !contextNode) {
@@ -1440,24 +1238,18 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
   return (
     <section className="graph-canvas" aria-label="Dependency graph canvas">
       <div className="graph-canvas-viewport" ref={containerRef}>
-        <canvas
-          ref={canvasRef}
-          className={`graph-canvas-layer ${renderMode === 'canvas' ? 'is-visible' : 'is-hidden'}`}
-        />
         <svg ref={svgRef} className="graph-canvas-svg" />
 
         <div className="graph-canvas-hud">
           <span>Nodes: {filteredNodes.length}</span>
           <span>Links: {filteredEdges.length}</span>
           <span>Zoom: {zoomLevel.toFixed(2)}x</span>
-          <span>Layout: {layoutMode}</span>
-          <span>Color: {overlayMode}</span>
+          <span>Mode: {viewMode}</span>
         </div>
 
         <GraphControls
           zoomLevel={zoomLevel}
-          layoutMode={layoutMode}
-          overlayMode={overlayMode}
+          viewMode={viewMode}
           showOrphans={showOrphans}
           detectedLanguages={detectedLanguages}
           hiddenLanguages={hiddenLanguages}
@@ -1467,8 +1259,7 @@ export function GraphCanvas({ nodes, edges, onNodeSelect }: GraphCanvasProps) {
           onZoomOut={() => handleZoomDelta(1 / 1.2)}
           onFitAll={handleFitAll}
           onResetLayout={handleResetLayout}
-          onLayoutModeChange={setLayoutMode}
-          onOverlayModeChange={setOverlayMode}
+          onViewModeChange={setViewMode}
           onToggleOrphans={() => setShowOrphans((value) => !value)}
           onToggleLanguage={toggleLanguage}
           onSearchChange={setSearchQuery}

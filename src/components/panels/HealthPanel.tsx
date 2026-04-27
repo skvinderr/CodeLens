@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import type {
   BusFactorAnalysis,
@@ -114,7 +114,7 @@ const CATEGORY_ROWS: Array<{ key: keyof HealthCategories; label: string }> = [
   { key: 'codeSmells', label: 'Code Health' },
 ]
 
-function HealthPanelComponent({
+export function HealthPanel({
   score,
   busFactor,
   techStack,
@@ -409,5 +409,3 @@ function HealthPanelComponent({
     </section>
   )
 }
-
-export const HealthPanel = memo(HealthPanelComponent)

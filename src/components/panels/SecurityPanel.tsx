@@ -1,7 +1,7 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { getSeverityStats } from '@/lib/analysis/securityScanner'
 import { useAppStore } from '@/store/useAppStore'
-import { downloadTextFile, exportSecurityMarkdown } from '@/utils/exportUtils'
+import { downloadTextFile } from '@/utils/exportUtils'
 import type { AlertType, SecurityAlert, SecurityFinding } from '@/types'
 
 export interface SecurityPanelProps {
@@ -67,6 +67,35 @@ function formatAlertType(type: AlertType): string {
     .split('-')
     .map((part) => capitalize(part))
     .join(' ')
+}
+
+function buildMarkdownIssue(alerts: SecurityAlert[]): string {
+  const stats = getSeverityStats(alerts)
+  const lines: string[] = []
+
+  lines.push('# Security Scan Report')
+  lines.push('')
+  lines.push(`Generated: ${new Date().toISOString()}`)
+  lines.push('')
+  lines.push('## Summary')
+  lines.push(`- Critical: ${stats.critical}`)
+  lines.push(`- High: ${stats.high}`)
+  lines.push(`- Medium: ${stats.medium}`)
+  lines.push(`- Low: ${stats.low}`)
+  lines.push(`- Total: ${stats.total}`)
+  lines.push('')
+  lines.push('## Findings')
+
+  for (const alert of alerts) {
+    lines.push(
+      `- [ ] [${alert.severity.toUpperCase()}] ${alert.filePath}:${alert.line}:${alert.column} - ${formatAlertType(alert.type)}`,
+    )
+    lines.push(`  - ${alert.description}`)
+    lines.push(`  - Snippet: \`${alert.snippet}\``)
+    lines.push(`  - Recommendation: ${alert.recommendation}`)
+  }
+
+  return lines.join('\n')
 }
 
 function toSarifLevel(severity: SecurityAlert['severity']): 'error' | 'warning' | 'note' {
@@ -191,7 +220,7 @@ function AlertCard({ alert, expanded, onToggleExpanded, onJumpToFile }: AlertCar
   )
 }
 
-function SecurityPanelComponent({ findings }: SecurityPanelProps) {
+export function SecurityPanel({ findings }: SecurityPanelProps) {
   const analysisResult = useAppStore((state) => state.analysisResult)
   const selectNode = useAppStore((state) => state.selectNode)
 
@@ -314,7 +343,12 @@ function SecurityPanelComponent({ findings }: SecurityPanelProps) {
   }
 
   const exportMarkdown = () => {
-    exportSecurityMarkdown(alerts)
+    const markdown = buildMarkdownIssue(alerts)
+    downloadTextFile({
+      fileName: 'security-report.md',
+      data: markdown,
+      mimeType: 'text/markdown',
+    })
   }
 
   const exportJson = () => {
@@ -487,5 +521,3 @@ function SecurityPanelComponent({ findings }: SecurityPanelProps) {
     </section>
   )
 }
-
-export const SecurityPanel = memo(SecurityPanelComponent)

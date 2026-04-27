@@ -1,4 +1,9 @@
-import type { GraphLayoutMode, GraphOverlayMode } from '@/store/useAppStore'
+export type GraphViewMode =
+  | 'force'
+  | 'radial'
+  | 'hierarchical'
+  | 'heatmap'
+  | 'ownership'
 
 export interface OwnershipLegendItem {
   login: string
@@ -8,8 +13,7 @@ export interface OwnershipLegendItem {
 
 export interface GraphControlsProps {
   zoomLevel: number
-  layoutMode: GraphLayoutMode
-  overlayMode: GraphOverlayMode
+  viewMode: GraphViewMode
   showOrphans: boolean
   detectedLanguages: string[]
   hiddenLanguages: string[]
@@ -19,8 +23,7 @@ export interface GraphControlsProps {
   onZoomOut: () => void
   onFitAll: () => void
   onResetLayout: () => void
-  onLayoutModeChange: (mode: GraphLayoutMode) => void
-  onOverlayModeChange: (mode: GraphOverlayMode) => void
+  onViewModeChange: (mode: GraphViewMode) => void
   onToggleOrphans: () => void
   onToggleLanguage: (language: string) => void
   onSearchChange: (value: string) => void
@@ -28,32 +31,17 @@ export interface GraphControlsProps {
   onReleaseAll: () => void
 }
 
-const LAYOUT_MODES: Array<{ value: GraphLayoutMode; label: string; icon: string }> = [
-  { value: 'force', label: 'Force', icon: 'F' },
-  { value: 'radial', label: 'Radial', icon: 'R' },
-  { value: 'hierarchical', label: 'Tree', icon: 'T' },
-  { value: 'cluster', label: 'Cluster', icon: 'C' },
-]
-
-const OVERLAY_MODES: Array<{ value: GraphOverlayMode; label: string }> = [
-  { value: 'language', label: 'Language' },
-  { value: 'blast', label: 'Blast' },
-  { value: 'size', label: 'Size' },
-  { value: 'age', label: 'Age' },
-  { value: 'tests', label: 'Tests' },
-  { value: 'ownership', label: 'Ownership' },
-]
-
-const LEGACY_VIEW_MODES: Array<{ value: GraphLayoutMode; label: string }> = [
+const VIEW_MODES: Array<{ value: GraphViewMode; label: string }> = [
   { value: 'force', label: 'Force' },
   { value: 'radial', label: 'Radial' },
   { value: 'hierarchical', label: 'Hierarchical' },
+  { value: 'heatmap', label: 'Heatmap' },
+  { value: 'ownership', label: 'Ownership' },
 ]
 
 export function GraphControls({
   zoomLevel,
-  layoutMode,
-  overlayMode,
+  viewMode,
   showOrphans,
   detectedLanguages,
   hiddenLanguages,
@@ -63,8 +51,7 @@ export function GraphControls({
   onZoomOut,
   onFitAll,
   onResetLayout,
-  onLayoutModeChange,
-  onOverlayModeChange,
+  onViewModeChange,
   onToggleOrphans,
   onToggleLanguage,
   onSearchChange,
@@ -93,40 +80,20 @@ export function GraphControls({
 
       <p className="graph-controls-meta">Zoom {zoomLevel.toFixed(2)}x</p>
 
-      <div className="graph-controls-layout-row" aria-label="Layout modes">
-        {LAYOUT_MODES.map((mode) => (
+      <div className="graph-controls-modes" role="tablist" aria-label="View modes">
+        {VIEW_MODES.map((mode) => (
           <button
             key={mode.value}
             type="button"
-            className={mode.value === layoutMode ? 'is-active graph-layout-button' : 'graph-layout-button'}
-            onClick={() => onLayoutModeChange(mode.value)}
-            aria-label={mode.label}
-            title={mode.label}
+            className={mode.value === viewMode ? 'is-active' : ''}
+            onClick={() => onViewModeChange(mode.value)}
           >
-            <span aria-hidden="true">{mode.icon}</span>
-            <span>{mode.label}</span>
+            {mode.label}
           </button>
         ))}
       </div>
 
-      <label className="graph-controls-search" htmlFor="graph-overlay-select">
-        <span>Color by</span>
-        <select
-          id="graph-overlay-select"
-          value={overlayMode}
-          onChange={(event) =>
-            onOverlayModeChange(event.target.value as GraphOverlayMode)
-          }
-        >
-          {OVERLAY_MODES.map((mode) => (
-            <option key={mode.value} value={mode.value}>
-              {mode.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      {overlayMode === 'ownership' ? (
+      {viewMode === 'ownership' ? (
         <div className="graph-controls-ownership" aria-label="Ownership legend">
           <p className="graph-controls-meta">Contributor ownership</p>
           {ownershipLegend.length === 0 ? (
@@ -149,6 +116,12 @@ export function GraphControls({
         </div>
       ) : null}
 
+      <div className="graph-controls-filter-row">
+        <button type="button" onClick={onToggleOrphans}>
+          {showOrphans ? 'Hide orphans' : 'Show orphans'}
+        </button>
+      </div>
+
       <div className="graph-controls-language-chips" aria-label="Language filters">
         {detectedLanguages.map((language) => {
           const isHidden = hiddenLanguages.includes(language)
@@ -163,12 +136,6 @@ export function GraphControls({
             </button>
           )
         })}
-      </div>
-
-      <div className="graph-controls-filter-row">
-        <button type="button" onClick={onToggleOrphans}>
-          {showOrphans ? 'Hide orphans' : 'Show orphans'}
-        </button>
       </div>
 
       <label className="graph-controls-search" htmlFor="graph-search-input">
@@ -189,19 +156,6 @@ export function GraphControls({
         <button type="button" onClick={onReleaseAll}>
           Release all
         </button>
-      </div>
-
-      <div className="graph-controls-modes" role="tablist" aria-label="Legacy layout labels">
-        {LEGACY_VIEW_MODES.map((mode) => (
-          <button
-            key={mode.value}
-            type="button"
-            className={mode.value === layoutMode ? 'is-active' : ''}
-            onClick={() => onLayoutModeChange(mode.value)}
-          >
-            {mode.label}
-          </button>
-        ))}
       </div>
     </section>
   )

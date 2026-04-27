@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import {
   contributorColorFromLogin,
@@ -82,7 +82,7 @@ function getNodeFilename(node: GraphNode): string {
   return segments[segments.length - 1] || node.name || node.id
 }
 
-function ContributorsPanelComponent({
+export function ContributorsPanel({
   selectedNode,
   contributorsByFile,
   fallbackContributors = [],
@@ -216,5 +216,3 @@ function ContributorsPanelComponent({
     </section>
   )
 }
-
-export const ContributorsPanel = memo(ContributorsPanelComponent)
