@@ -54,6 +54,9 @@ function FileTreePanelComponent({ files }: FileTreePanelProps) {
           {items.map((item) => (
             <li
               key={String(item.key)}
+              className={`file-tree-item ${
+                item.entry.node.type === 'directory' ? 'is-directory' : 'is-file'
+              }`}
               style={
                 shouldVirtualize
                   ? {
@@ -66,8 +69,16 @@ function FileTreePanelComponent({ files }: FileTreePanelProps) {
                   : { paddingLeft: `${item.entry.depth * 14}px` }
               }
             >
-              <span style={!shouldVirtualize ? undefined : { paddingLeft: `${item.entry.depth * 14}px` }}>
-                {item.entry.node.type === 'directory' ? '[dir]' : '[file]'} {item.entry.node.path}
+              <span
+                className="file-tree-line"
+                style={!shouldVirtualize ? undefined : { paddingLeft: `${item.entry.depth * 14}px` }}
+              >
+                <span className="file-tree-token">
+                  {item.entry.node.type === 'directory'
+                    ? 'DIR'
+                    : item.entry.node.extension?.toUpperCase() || 'FILE'}
+                </span>{' '}
+                <span className="file-tree-path">{item.entry.node.path}</span>
               </span>
             </li>
           ))}

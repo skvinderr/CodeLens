@@ -20,6 +20,11 @@ export function ProgressOverlay({
 }: ProgressOverlayProps) {
   const [showViewResults, setShowViewResults] = useState(false)
 
+  const fileReadStage = stages.find((stage) => stage.id === 'read-contents') ?? null
+  const contributorStage = stages.find((stage) => stage.id === 'contributors') ?? null
+  const allDone = stages.length > 0 && stages.every((stage) => stage.status === 'done')
+  const showSkipContributors = contributorStage?.status === 'running'
+
   useEffect(() => {
     if (!isVisible) {
       setShowViewResults(false)
@@ -36,16 +41,11 @@ export function ProgressOverlay({
     return () => window.clearTimeout(timer)
   }, [isVisible, stages])
 
-  if (!isVisible) {
-    return null
-  }
-
-  const fileReadStage = stages.find((stage) => stage.id === 'read-contents') ?? null
-  const contributorStage = stages.find((stage) => stage.id === 'contributors') ?? null
-  const allDone = stages.length > 0 && stages.every((stage) => stage.status === 'done')
-  const showSkipContributors = contributorStage?.status === 'running'
-
   const eta = useMemo(() => {
+    if (!isVisible) {
+      return null
+    }
+
     if (!fileReadStage?.startedAt || !fileReadStage.total || !fileReadStage.current) {
       return null
     }
@@ -58,7 +58,11 @@ export function ProgressOverlay({
 
     const remaining = Math.max(0, fileReadStage.total - fileReadStage.current)
     return Math.ceil(remaining / filesPerSecond)
-  }, [fileReadStage?.current, fileReadStage?.startedAt, fileReadStage?.total])
+  }, [fileReadStage?.current, fileReadStage?.startedAt, fileReadStage?.total, isVisible])
+
+  if (!isVisible) {
+    return null
+  }
 
   return (
     <div className="progress-overlay" role="status" aria-live="polite">
